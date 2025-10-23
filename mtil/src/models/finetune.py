@@ -10,6 +10,26 @@ from .. import datasets, templates, utils
 from .evaluation import evaluate, zeroshot_classifier
 from .helpers import get_datasets_text, merge_we, wise_we, moving_avg, l2_loss, virtual_vocab, distillation
 
+
+import signal, torch, sys
+
+model_ref = None
+args_ref = None
+
+def handle_signal(signum, frame):
+    print(f"Signaled end, {signum}\n Saving...")
+    saved_model = model_ref.module
+    
+    path = os.path.join(args_ref.save, f"{args_ref.train_dataset}.pth")
+    utils.torch_save(saved_model, path)
+    print(f"Done saving: \nPath:{path}")
+    sys.exit(0)
+
+
+signal.signal(signal.SIGTERM, handle_signal)
+signal.signal(signal.SIGINT, handle_signal)
+
+
 def finetune(args):
     model, train_preprocess, val_preprocess = clip.load(args.model, jit=False)
     if args.load is not None:
@@ -178,6 +198,8 @@ def finetune(args):
         embeddings = zeroshot_classifier(dataset.classnames, dataset.templates, model)
 
     for iteration in tqdm(range(total_iterations + 1)):
+        model_ref = model
+        args_ref = args
         # evaluation
         if eval_iterations is not None and iteration % eval_iterations == 0:
             if args.we or args.we_wise:

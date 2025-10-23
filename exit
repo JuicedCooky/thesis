@@ -1,0 +1,29 @@
+[33mcommit d593c81910b5ea0003c77f0ad67b68c727c2fc8e[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m)[m
+Author: AlanZh21 <alan.zheng@ontariotechu.net>
+Date:   Wed Oct 22 20:45:48 2025 -0400
+
+    added signal
+
+[1mdiff --git a/mtil/test.py b/mtil/test.py[m
+[1mdeleted file mode 100644[m
+[1mindex 0613bd4..0000000[m
+[1m--- a/mtil/test.py[m
+[1m+++ /dev/null[m
+[36m@@ -1,17 +0,0 @@[m
+[31m-from datasets import load_dataset[m
+[31m-import os[m
+[31m-[m
+[31m-dataset = load_dataset(path="./data/hub/datasets--ILSVRC--imagenet-1k", split="train" ''',token=""''')[m
+[31m-[m
+[31m-save_dir = "./data/ImageNet/train"[m
+[31m-os.makedirs(save_dir, exist_ok=True)[m
+[31m-[m
+[31m-for i, sample in enumerate(dataset):[m
+[31m-    img = sample["image"]        # PIL.Image[m
+[31m-    label = sample["label"]      # integer 0-999[m
+[31m-    class_name = dataset.features["label"].int2str(label)  # 'n01440764', etc.[m
+[31m-[m
+[31m-    class_dir = os.path.join(save_dir, class_name)[m
+[31m-    os.makedirs(class_dir, exist_ok=True)[m
+[31m-[m
+[31m-    img.save(os.path.join(class_dir, f"{i}.jpg"))[m
