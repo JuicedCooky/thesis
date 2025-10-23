@@ -267,8 +267,12 @@ def finetune(args):
                     ref_images, ref_labels = next(ref_iter)
             ref_images, ref_labels = ref_images.cuda(), ref_labels.cuda()
             # breakpoint()
+            
+            ref_model = torch.nn.DataParallel(ref_model)
+            ref_model = ref_model.cuda()
             with torch.no_grad():
                 # -- get ref text embedding --
+                
                 ref_embeddings = ref_model(None, ref_texts)
                 ref_embeddings = ref_embeddings / ref_embeddings.norm(
                     dim=-1, keepdim=True
