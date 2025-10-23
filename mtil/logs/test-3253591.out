@@ -1,0 +1,24 @@
+/home/alanz21/jobs/ZSCL/lib/python3.11/site-packages/torch/utils/data/dataloader.py:627: UserWarning: This DataLoader will create 16 worker processes in total. Our suggested max number of worker in current system is 4, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(
+Namespace(model='ViT-B/16', batch_size=8, batch_size_eval=32, lr=1e-05, wd=0.0, ls=0.2, warmup_length=100, beta2=0.999, seed=42, epochs=None, iterations=1000, eval_interval=None, loss_interval=1000, eval_every_epoch=False, eval_only=False, method='ZSCL', train_mode='whole', data_location='./data', train_dataset='DTD', eval_datasets=None, text_datasets=None, template=None, save='ckpt/exp_000', load=None, load_federate=None, fair=False, we=True, we_wise=False, we_wise_alpha=0.98, moving_avg=False, avg_freq=100, mv_avg_decay=0.999, mv_avg_model='n', l2=1.0, fc_init=False, fc_setnone=False, dataset_shift=False, n_class=10, ref_wise_alpha=0.8, ref_wise=False, ref_dataset='MNIST', ref_model=None, ref_sentences='conceptual_captions', T=2.0, num=64, dataset_order=None, memory_size=10000, weight_adjust=False, feature_mse=False, image_loss=True, text_loss=True, ablation_loss_2=False, wise_merge=False, wise_ft=False, wise_ft_model='n', wise_ft_alpha=0.8, exp_name=None, results_db='results.jsonl', cache_dir=None, freeze_encoder=False, freeze_fc=0, lwf=False, basic_model_load=None, fc_load=None, keep_old_heads=0, baseline=False, trio=False, control_dataset=None, control_dataset_add=None, noise=True, rff=False, alpha=0.5, fisher=None, fisher_floor=1e-08, device='cuda')
+Averaging training
+L2 norm
+Iterations per epoch: 235
+Total iterations: 1000
+[Training mode] Both Encoders
+Using devices [0, 1]
+[Method] ZSCL
+[ref_model] Zero-shot
+[Ref Dataset] MNIST
+/home/alanz21/jobs/ZSCL/lib/python3.11/site-packages/torch/utils/data/dataloader.py:627: UserWarning: This DataLoader will create 16 worker processes in total. Our suggested max number of worker in current system is 4, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(
+[Ref Sentences] conceptual_captions
+  0%|          | 0/1001 [00:00<?, ?it/s]  0%|          | 1/1001 [00:03<1:02:53,  3.77s/it]  0%|          | 2/1001 [00:05<46:48,  2.81s/it]    0%|          | 3/1001 [00:08<41:41,  2.51s/it]  0%|          | 4/1001 [00:10<39:12,  2.36s/it]  0%|          | 5/1001 [00:12<37:50,  2.28s/it]  1%|          | 6/1001 [00:14<36:59,  2.23s/it]  1%|          | 7/1001 [00:16<36:28,  2.20s/it]  1%|          | 8/1001 [00:18<36:05,  2.18s/it]  1%|          | 9/1001 [00:20<35:49,  2.17s/it]  1%|          | 10/1001 [00:23<35:38,  2.16s/it]  1%|          | 11/1001 [00:25<35:30,  2.15s/it]  1%|          | 12/1001 [00:27<35:24,  2.15s/it]  1%|▏         | 13/1001 [00:29<35:19,  2.15s/it]  1%|▏         | 14/1001 [00:31<35:15,  2.14s/it]  1%|▏         | 15/1001 [00:33<35:11,  2.14s/it]  2%|▏         | 16/1001 [00:35<35:08,  2.14s/it]  2%|▏         | 17/1001 [00:37<35:06,  2.14s/it]  2%|▏         | 18/1001 [00:40<35:03,  2.14s/it]  2%|▏         | 19/1001 [00:42<35:30,  2.17s/it]  2%|▏         | 20/1001 [00:44<35:18,  2.16s/it]  2%|▏         | 21/1001 [00:46<35:09,  2.15s/it]  2%|▏         | 22/1001 [00:48<35:02,  2.15s/it]  2%|▏         | 23/1001 [00:50<34:56,  2.14s/it]  2%|▏         | 24/1001 [00:53<34:52,  2.14s/it]  2%|▏         | 25/1001 [00:55<34:48,  2.14s/it]  3%|▎         | 26/1001 [00:57<34:46,  2.14s/it]  3%|▎         | 27/1001 [00:59<34:43,  2.14s/it]  3%|▎         | 28/1001 [01:01<34:40,  2.14s/it]  3%|▎         | 29/1001 [01:03<34:37,  2.14s/it]  3%|▎         | 30/1001 [01:05<34:35,  2.14s/it]  3%|▎         | 31/1001 [01:08<34:33,  2.14s/it]  3%|▎         | 32/1001 [01:10<34:30,  2.14s/it]  3%|▎         | 33/1001 [01:12<34:28,  2.14s/it]  3%|▎         | 34/1001 [01:14<34:27,  2.14s/it]  3%|▎         | 35/1001 [01:16<34:24,  2.14s/it]  3%|▎         | 35/1001 [01:19<36:31,  2.27s/it]
+Loss: 45.56977462768555
+Loss ZSCL: 34.948448181152344
+Loss L2: 0.0
+Signaled end, 10
+ Saving...
+Checkpoint saved to ckpt/exp_000/DTD.pth
+Done saving: 
+Path:ckpt/exp_000/DTD.pth

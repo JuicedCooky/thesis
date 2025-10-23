@@ -18,19 +18,23 @@ args_ref = None
 
 def handle_signal(signum, frame):
     print(f"Signaled end, {signum}\n Saving...")
-    saved_model = model_ref.module
     
+    if model_ref is None:
+        print("Model not initialized yet. Exitting...")
+        sys.exit(0)
+
+    saved_model = model_ref
     path = os.path.join(args_ref.save, f"{args_ref.train_dataset}.pth")
     utils.torch_save(saved_model, path)
     print(f"Done saving: \nPath:{path}")
     sys.exit(0)
 
 
-signal.signal(signal.SIGTERM, handle_signal)
-signal.signal(signal.SIGINT, handle_signal)
+signal.signal(signal.SIGUSR1, handle_signal)
 
 
 def finetune(args):
+    global model_ref, args_ref
     model, train_preprocess, val_preprocess = clip.load(args.model, jit=False)
     if args.load is not None:
         utils.torch_load(model, args.load)
@@ -198,7 +202,7 @@ def finetune(args):
         embeddings = zeroshot_classifier(dataset.classnames, dataset.templates, model)
 
     for iteration in tqdm(range(total_iterations + 1)):
-        model_ref = model
+        model_ref = model.module
         args_ref = args
         # evaluation
         if eval_iterations is not None and iteration % eval_iterations == 0:
@@ -268,8 +272,8 @@ def finetune(args):
             ref_images, ref_labels = ref_images.cuda(), ref_labels.cuda()
             # breakpoint()
             
-            ref_model = torch.nn.DataParallel(ref_model)
-            ref_model = ref_model.cuda()
+            # ref_model = torch.nn.DataParallel(ref_model)
+            # ref_model = ref_model.cuda()
             with torch.no_grad():
                 # -- get ref text embedding --
                 
