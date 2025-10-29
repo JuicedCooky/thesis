@@ -32,9 +32,9 @@ def handle_signal(signum, frame):
     }
 
     path = os.path.join(args_ref.save, f"{args_ref.train_dataset}.pth")
-    #utils.torch_save(saved_model, path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save(checkpoint, path)
+    utils.torch_save(saved_model, path)
+    # torch.save(checkpoint, path)
     
     print(f"Done saving: \nPath:{path}")
     sys.exit(0)
@@ -254,6 +254,9 @@ def finetune(args):
         # -- get text embedding --
         if args.train_mode != "text":
             
+            print("GPUs visible:", torch.cuda.device_count())
+            print("Model type:", type(model))
+            print("Is DataParallel:", isinstance(model, torch.nn.DataParallel))
             embeddings = model(None, texts)
             embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)
 
@@ -293,6 +296,9 @@ def finetune(args):
             with torch.no_grad():
                 # -- get ref text embedding --
                 
+                print("GPUs visible:", torch.cuda.device_count())
+                print("Model type:", type(model))
+                print("Is DataParallel:", isinstance(model, torch.nn.DataParallel))
                 ref_embeddings = ref_model(None, ref_texts)
                 ref_embeddings = ref_embeddings / ref_embeddings.norm(
                     dim=-1, keepdim=True
@@ -393,14 +399,14 @@ def finetune(args):
             to_save_model = we_model
         else:
             to_save_model = model.module
-        # to_save_model = model.module
-        #utils.torch_save(to_save_model, path)
+        to_save_model = model.module
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        path = os.path.join(args.save, f"{args.train_dataset}.pth")
+        utils.torch_save(to_save_model, path)
         
         checkpoint = {
             "iteration": iteration_save,
             "state_dict": to_save_model.state_dict(),
         }
 
-        path = os.path.join(args.save, f"{args.train_dataset}.pth")
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        torch.save(checkpoint, path)
+        # torch.save(checkpoint, path)
