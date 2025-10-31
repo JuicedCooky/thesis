@@ -36,11 +36,13 @@ def eval_and_save(args, model, val_preprocess, model_iteration_count, loss_dict)
                 writer.writerow({
                     "iteration": model_iteration_count,
                     "top1": metrics["top1"],
-                    "top1": metrics["top5"],
+                    "top5": metrics["top5"],
                     "ZSCL": loss_dict["ZSCL"],
                     "L2": loss_dict["L2"]
                 })
             print(f"Saving evaluation results to {path}...")
+    del results
+    torch.cuda.empty_cache()
 
 def handle_signal(signum, frame):
     print(f"Signaled end, {signum}\n Saving...")
@@ -74,6 +76,8 @@ signal.signal(signal.SIGUSR1, handle_signal)
 
 def finetune(args):
     global model_ref, args_ref, iteration_save, val_preprocess_ref
+    prev_L2_loss = None
+    prev_ZSCL_loss = None
     args_ref = args
     model, train_preprocess, val_preprocess = clip.load(args.model, jit=False)
     
@@ -250,12 +254,10 @@ def finetune(args):
 
 
 
-    prev_L2_loss = None
-    prev_ZSCL_loss = None
 
+    model_ref = model.module if hasattr(model, "module") else model
     for iteration in tqdm(range(model_iteration_count, total_iterations + 1)):
         #saving references
-        model_ref = model.module
         iteration_save = iteration
 
 
@@ -268,10 +270,12 @@ def finetune(args):
         if iteration % args.eval_interval == 0:
             print("Saving accuracies...")
             torch.cuda.empty_cache()
+
             loss_dict = {
                 "ZSCL": prev_ZSCL_loss,
                 "L2": prev_L2_loss
             }
+
             with torch.no_grad():
                 eval_and_save(args, model, val_preprocess, iteration, loss_dict)
             torch.cuda.empty_cache()    
