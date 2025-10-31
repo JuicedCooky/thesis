@@ -3,6 +3,7 @@ import clip
 import os
 import csv
 import torch
+import gc
 from tqdm import tqdm
 
 from .. import datasets
@@ -137,6 +138,9 @@ def eval_single_dataset_2(image_classifier, dataset, args):
     top1, top5 = zeroshot_eval(model, dataloader, zeroshot_weights)
     print(f"Top-1 accuracy: {top1:.2f}")
     # print(f"Top-5 accuracy: {top5:.2f}")
+    del dataloader, zeroshot_weights
+    torch.cuda.empty_cache()
+    gc.collect()
     return {
         "top1": top1,
         "top5": top5
@@ -160,4 +164,8 @@ def evaluate_2(image_classifier, args, val_preprocess):
         dict = {"dataset_name": dataset_name, "metrics": tops}
         
         result.append(dict)
+
+        del dataset, tops, dataset_class
+        torch.cuda.empty_cache()
+        gc.collect()
     return result

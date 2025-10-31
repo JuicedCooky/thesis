@@ -5,12 +5,12 @@ from matplotlib.ticker import FormatStrFormatter
 
 
 
-def plot_metrics():
+def plot_metrics(path):
     x_label = []
     iterations = []
     accuracies_top1 = []
     accuracies_top5 = []
-    path = "./ckpt/test2/"
+    
 
     for csv_file in os.listdir(path):
         if csv_file.endswith(".csv") and csv_file.find("metrics")!=-1:
@@ -48,12 +48,11 @@ def plot_metrics():
 
     # plt.plot(iterations, )
 
-def plot_all():
+def plot_all(path):
     versions = []
     datasets = []
     accuracies_top1 = []
     accuracies_top5 = []
-    path = "./ckpt/test2/"
 
     index = 1
     while True:
@@ -101,4 +100,4 @@ def plot_all():
     plt.savefig(path +"/"+ "output_all.png")
 
 if __name__ == "__main__":
-    plot_all()
+    plot_metrics("./ckpt/DTD/MNIST")
