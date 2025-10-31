@@ -7,7 +7,7 @@ import torch
 
 from . import utils
 from .args import parse_arguments
-from .models import evaluate, evaluate_fc, evaluate_wise_ft, finetune, finetune_fc, finetune_icarl
+from .models import evaluate, evaluate_fc, evaluate_wise_ft, finetune, finetune_fc, finetune_icarl, test
 from .models.modeling import create_image_classifier
 
 
@@ -21,6 +21,12 @@ def merge(model_0, model_1, alpha=0.95):
 def main(args):
     print(args)
     utils.seed_all(args.seed)
+    if args.test:
+        print("test")
+
+        test.test(args)
+
+        exit(0)
 
     if "fc" in args.train_mode:
         assert args.train_mode in ["image-fc", "image-fc-fixed"]

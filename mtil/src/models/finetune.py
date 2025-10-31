@@ -211,10 +211,14 @@ def finetune(args):
     if args.train_mode == "text":
         embeddings = zeroshot_classifier(dataset.classnames, dataset.templates, model)
 
-    for iteration in tqdm(range(total_iterations + 1)):
+    
+    checkpoint = torch.load(args.load)
+    model_iteration_count = checkpoint["iteration"]
+    for iteration in tqdm(range(model_iteration_count, total_iterations + 1)):
         #saving references
         model_ref = model.module
         iteration_save = iteration
+
 
         if args.we or args.we_wise:
             model_ref = we_model

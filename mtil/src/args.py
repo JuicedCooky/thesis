@@ -6,6 +6,9 @@ import torch
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
+    #TESTING
+    parser.add_argument("--test", action="store_true")
+
     # hyper parameters
     parser.add_argument("--model", type=str, default="ViT-B/16")
     parser.add_argument("--batch-size", type=int, default=8)

@@ -92,3 +92,45 @@ def evaluate(image_classifier, args, val_preprocess):
             batch_size_eval=args.batch_size_eval,
         )
         eval_single_dataset(image_classifier, dataset, args)
+
+def eval_single_dataset_2(image_classifier, dataset, args):
+    model = image_classifier
+    input_key = "images"
+    image_enc = None
+
+    model.eval()
+
+    zeroshot_weights = zeroshot_classifier(
+        dataset.classnames, dataset.templates, model
+    )
+
+    dataloader = get_dataloader(
+        dataset, is_train=False, args=args, image_encoder=image_enc
+    )
+
+    top1, top5 = zeroshot_eval(model, dataloader, zeroshot_weights)
+    print(f"Top-1 accuracy: {top1:.2f}")
+    # print(f"Top-5 accuracy: {top5:.2f}")
+    return {
+        "top1": top1,
+        "top5":top5
+        }
+
+def evaluate_2(image_classifier, args, val_preprocess):
+    result = []
+
+    if args.eval_datasets is None:
+        return
+    for i, dataset_name in enumerate(args.eval_datasets):
+        print("Evaluating on", dataset_name)
+        dataset_class = getattr(datasets, dataset_name)
+        dataset = dataset_class(
+            val_preprocess,
+            location=args.data_location,
+            batch_size=args.batch_size,
+            batch_size_eval=args.batch_size_eval,
+        )
+        dict = eval_single_dataset_2(image_classifier, dataset, args)
+        dict["dataset_name"] = dataset_name
+        result.append(dict)
+    return result
