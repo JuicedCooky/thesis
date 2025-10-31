@@ -110,9 +110,10 @@ def evaluate(image_classifier, args, val_preprocess):
                 "top5": top5,
             }
         
-        with open(path, mode="w", newline="") as f:
+        with open(path, mode="a", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["iteration","top1","top5","ZSCL","L2"])
-            writer.writeheader()
+            if f.tell() == 0:
+                writer.writeheader()
             writer.writerow(row)
 
 def eval_single_dataset_2(image_classifier, dataset, args):
