@@ -58,32 +58,35 @@ def plot_all():
     index = 1
     while True:
         folder = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path,f))]
-        if not folder:
-            break
 
-        folder = folder[0]
-        print(f"folder:{folder}")
-
+        if folder:
+            folder = folder[0]
+            print(f"folder:{folder}")
+        
         for csv_file in os.listdir(path):
             if csv_file.endswith(".csv") and csv_file.find("results")!=-1:
-                versions.append(folder)
                 print(csv_file)
+                versions.append(path.split("/")[-1])
 
                 with open(path +"/"+ csv_file, newline="") as f:
                     reader = list(csv.DictReader(f))
 
-                    datasets.append(row["dataset"] for row in reader)
+                    datasets = [(row["dataset"]) for row in reader]
                     accuracies_top1.append([float(row["top1"]) for row in reader])
                     accuracies_top5.append([float(row["top5"]) for row in reader])
-        path = os.path.join(path,folder)
         index+=1
+        if not folder:
+            break
+        path = os.path.join(path,folder)
     
+    versions[0] = "DTD"
+    print(datasets)
     print(accuracies_top1)    
+    print(versions)
 
     index = 0
     for dataset in datasets:
-        print(versions)
-        plt.plot(versions[index], accuracies_top1[index][index], label=versions)
+        plt.plot(versions, [accuracies_top1[i][index] for i in range(len(versions))], label=dataset)
         
         index+=1
 
@@ -94,7 +97,7 @@ def plot_all():
     plt.legend()
     plt.ylabel("accuracy(%)")
     plt.xlabel("iterations")
-    plt.gca().yaxis.set_major_formatter(FormatStrFormatter("%.0f"))
+    # plt.gca().yaxis.set_major_formatter(FormatStrFormatter("%.0f"))
     plt.savefig(path +"/"+ "output_all.png")
 
 if __name__ == "__main__":

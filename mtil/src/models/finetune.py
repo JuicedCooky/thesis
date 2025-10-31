@@ -42,8 +42,6 @@ def eval_and_save(args, model, val_preprocess, model_iteration_count, loss_dict)
                     "iteration": model_iteration_count,
                     "top1": metrics["top1"],
                     "top5": metrics["top5"],
-                    "ZSCL": loss_dict["ZSCL"],
-                    "L2": loss_dict["L2"]
                 })
             
             unique = {}
@@ -101,6 +99,8 @@ def finetune(args):
         utils.torch_load(model, args.load)
         
         model_iteration_count = torch.load(args.load)["iteration"]
+        if args.start_iteration is not None:
+            model_iteration_count = args.start_iteration
         print(f"Loaded checkpoint, total_iterations: {model_iteration_count}")
 
     if args.we_wise or (args.wise_merge and args.wise_ft_model != "zeroshot"):

@@ -28,6 +28,7 @@ def parse_arguments():
     parser.add_argument("--eval-every-epoch", action="store_true")
     parser.add_argument("--eval-only", action="store_true")
     parser.add_argument("--save-eval", action="store_true")
+    parser.add_argument("--start-iteration", type=int, default=None)
 
     # exp setting
     parser.add_argument(
