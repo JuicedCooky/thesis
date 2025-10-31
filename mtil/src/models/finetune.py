@@ -17,7 +17,6 @@ import signal, torch, sys
 model_ref = None
 args_ref = None
 iteration_save = 0
-val_preprocess_ref = None
 
 def eval_and_save(args, model, val_preprocess, model_iteration_count, loss_dict):
     
@@ -27,19 +26,30 @@ def eval_and_save(args, model, val_preprocess, model_iteration_count, loss_dict)
         for dict in results:
             print(f"Saving {dict['dataset_name']} results")
             path = args.save + "/" + f"metrics_{dict['dataset_name']}.csv"
-            
-            with open(path, mode="a", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=["iteration","top1","top5","ZSCL","L2"])
-                if f.tell() == 0:
-                    writer.writeheader()
-                metrics = dict["metrics"]
-                writer.writerow({
+
+            rows=[]
+            with open(path, newline="") as f:
+                reader=csv.DictReader(f)
+                rows = list(reader)
+
+            metrics = dict["metrics"]
+            rows.append({
                     "iteration": model_iteration_count,
                     "top1": metrics["top1"],
                     "top5": metrics["top5"],
                     "ZSCL": loss_dict["ZSCL"],
                     "L2": loss_dict["L2"]
                 })
+            
+            unique = {}
+            for row in rows:
+                unique[row[key_column]] = row
+            
+            with open(path, mode="a", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=["iteration","top1","top5","ZSCL","L2"])
+                if f.tell() == 0:
+                    writer.writeheader()
+                writer.writerows(unique.values())
             print(f"Saving evaluation results to {path}...")
     del results
     torch.cuda.empty_cache()
@@ -75,7 +85,7 @@ signal.signal(signal.SIGUSR1, handle_signal)
 
 
 def finetune(args):
-    global model_ref, args_ref, iteration_save, val_preprocess_ref
+    global model_ref, args_ref, iteration_save
     prev_L2_loss = None
     prev_ZSCL_loss = None
     args_ref = args
@@ -85,10 +95,8 @@ def finetune(args):
     if args.load is not None:
         utils.torch_load(model, args.load)
         
-        checkpoint = torch.load(args.load)
-        model_iteration_count = checkpoint["iteration"]
+        model_iteration_count = torch.load(args.load)["iteration"]
         print(f"Loaded checkpoint, total_iterations: {model_iteration_count}")
-    val_preprocess_ref = val_preprocess
 
     if args.we_wise or (args.wise_merge and args.wise_ft_model != "zeroshot"):
         print("Using WiSE-FT with Loaded Model")

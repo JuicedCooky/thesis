@@ -1,5 +1,7 @@
 import clip
 
+import csv
+import os
 import torch
 from tqdm import tqdm
 
@@ -83,11 +85,11 @@ def eval_single_dataset(image_classifier, dataset, args):
     print(f"Top-5 accuracy: {top5:.2f}")
     if args.save_eval is not None:
         name = dataset.__class__.__name__
-        path = args.load + "/" + f"{name}.csv"
+        path = os.path.dirname(args.load) + "/" + f"{name}.csv"
         
         with open(path, mode="w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["top1","top5"])
-            write.writeheader()
+            writer.writeheader()
             wrtier.writerow({
                 "top1": top1,
                 "top5": top5,
