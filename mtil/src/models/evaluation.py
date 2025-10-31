@@ -105,13 +105,13 @@ def evaluate(image_classifier, args, val_preprocess):
 
 
         row = {
-                "iteration": dataset_name,
+                "dataset": dataset_name,
                 "top1": top1,
                 "top5": top5,
             }
         
         with open(path, mode="a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["iteration","top1","top5","ZSCL","L2"])
+            writer = csv.DictWriter(f, fieldnames=["dataset","top1","top5"])
             if f.tell() == 0:
                 writer.writeheader()
             writer.writerow(row)

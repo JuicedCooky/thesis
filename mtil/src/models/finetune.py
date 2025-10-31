@@ -28,6 +28,11 @@ def eval_and_save(args, model, val_preprocess, model_iteration_count, loss_dict)
             path = args.save + "/" + f"metrics_{dict['dataset_name']}.csv"
 
             rows=[]
+            if not os.path.exists(path):
+                with open(path, "w", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=["iteration","top1","top5"])
+                    writer.writeheader()
+
             with open(path, newline="") as f:
                 reader=csv.DictReader(f)
                 rows = list(reader)
@@ -43,10 +48,10 @@ def eval_and_save(args, model, val_preprocess, model_iteration_count, loss_dict)
             
             unique = {}
             for row in rows:
-                unique[row[key_column]] = row
-            
+                unique[row["iteration"]] = row
+
             with open(path, mode="a", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=["iteration","top1","top5","ZSCL","L2"])
+                writer = csv.DictWriter(f, fieldnames=["iteration","top1","top5"])
                 if f.tell() == 0:
                     writer.writeheader()
                 writer.writerows(unique.values())

@@ -5,7 +5,7 @@ from matplotlib.ticker import FormatStrFormatter
 
 
 
-def plot():
+def plot_metrics():
     x_label = []
     iterations = []
     accuracies_top1 = []
@@ -13,7 +13,7 @@ def plot():
     path = "./ckpt/test2/"
 
     for csv_file in os.listdir(path):
-        if csv_file.endswith(".csv") and csv_file.find("metrics"):
+        if csv_file.endswith(".csv") and csv_file.find("metrics")!=-1:
             x_label.append(csv_file.split(".csv")[0].split("_")[-1])
 
             with open(path +"/"+ csv_file, newline="") as f:
@@ -48,6 +48,54 @@ def plot():
 
     # plt.plot(iterations, )
 
+def plot_all():
+    versions = []
+    datasets = []
+    accuracies_top1 = []
+    accuracies_top5 = []
+    path = "./ckpt/test2/"
+
+    index = 1
+    while True:
+        folder = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path,f))]
+        if not folder:
+            break
+
+        folder = folder[0]
+        print(f"folder:{folder}")
+
+        for csv_file in os.listdir(path):
+            if csv_file.endswith(".csv") and csv_file.find("results")!=-1:
+                versions.append(folder)
+                print(csv_file)
+
+                with open(path +"/"+ csv_file, newline="") as f:
+                    reader = list(csv.DictReader(f))
+
+                    datasets.append(row["dataset"] for row in reader)
+                    accuracies_top1.append([float(row["top1"]) for row in reader])
+                    accuracies_top5.append([float(row["top5"]) for row in reader])
+        path = os.path.join(path,folder)
+        index+=1
+    
+    print(accuracies_top1)    
+
+    index = 0
+    for dataset in datasets:
+        print(versions)
+        plt.plot(versions[index], accuracies_top1[index][index], label=versions)
+        
+        index+=1
+
+    # plt.ylim(0,100)
+    plt.title("accuracy over iterations\n \
+            Trained on: DTD",
+            fontsize=12)
+    plt.legend()
+    plt.ylabel("accuracy(%)")
+    plt.xlabel("iterations")
+    plt.gca().yaxis.set_major_formatter(FormatStrFormatter("%.0f"))
+    plt.savefig(path +"/"+ "output_all.png")
 
 if __name__ == "__main__":
-    plot()
+    plot_all()
