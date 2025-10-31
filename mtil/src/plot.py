@@ -96,7 +96,7 @@ def plot_all():
             fontsize=12)
     plt.legend()
     plt.ylabel("accuracy(%)")
-    plt.xlabel("iterations")
+    plt.xlabel("versions")
     # plt.gca().yaxis.set_major_formatter(FormatStrFormatter("%.0f"))
     plt.savefig(path +"/"+ "output_all.png")
 
