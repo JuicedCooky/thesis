@@ -1,7 +1,7 @@
 import clip
 
-import csv
 import os
+import csv
 import torch
 from tqdm import tqdm
 
@@ -83,18 +83,8 @@ def eval_single_dataset(image_classifier, dataset, args):
 
     print(f"Top-1 accuracy: {top1:.2f}")
     print(f"Top-5 accuracy: {top5:.2f}")
-    if args.save_eval is not None:
-        name = dataset.__class__.__name__
-        path = os.path.dirname(args.load) + "/" + f"{name}.csv"
-        
-        with open(path, mode="w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["top1","top5"])
-            writer.writeheader()
-            wrtier.writerow({
-                "top1": top1,
-                "top5": top5,
-            })
 
+    return top1, top5
 
 
 def evaluate(image_classifier, args, val_preprocess):
@@ -109,8 +99,21 @@ def evaluate(image_classifier, args, val_preprocess):
             batch_size=args.batch_size,
             batch_size_eval=args.batch_size_eval,
         )
-        eval_single_dataset(image_classifier, dataset, args)
+        top1, top5 = eval_single_dataset(image_classifier, dataset, args)
 
+        path = os.path.dirname(args.load) + "/" + "evaluate_all_results.csv"
+
+
+        row = {
+                "iteration": dataset_name,
+                "top1": top1,
+                "top5": top5,
+            }
+        
+        with open(path, mode="w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["iteration","top1","top5","ZSCL","L2"])
+            writer.writeheader()
+            writer.writerow(row)
 
 def eval_single_dataset_2(image_classifier, dataset, args):
     model = image_classifier

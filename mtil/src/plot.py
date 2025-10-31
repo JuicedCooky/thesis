@@ -13,7 +13,7 @@ def plot():
     path = "./ckpt/test2/"
 
     for csv_file in os.listdir(path):
-        if csv_file.endswith(".csv"):
+        if csv_file.endswith(".csv") and csv_file.find("metrics"):
             x_label.append(csv_file.split(".csv")[0].split("_")[-1])
 
             with open(path +"/"+ csv_file, newline="") as f:
