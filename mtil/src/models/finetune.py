@@ -1,5 +1,6 @@
 import copy
 import os
+import csv
 
 import clip.clip as clip
 import torch
@@ -7,7 +8,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from .. import datasets, templates, utils
-from .evaluation import evaluate, zeroshot_classifier
+from .evaluation import evaluate, zeroshot_classifier, evaluate_2
 from .helpers import get_datasets_text, merge_we, wise_we, moving_avg, l2_loss, virtual_vocab, distillation
 
 
@@ -16,6 +17,30 @@ import signal, torch, sys
 model_ref = None
 args_ref = None
 iteration_save = 0
+val_preprocess_ref = None
+
+def eval_and_save(args, model, val_preprocess, model_iteration_count, loss_dict):
+    
+    if args.eval_datasets is not None:
+        results = evaluate_2(model, args, val_preprocess)
+    
+        for dict in results:
+            print(f"Saving {dict['dataset_name']} results")
+            path = args.save + "/" + f"metrics_{dict['dataset_name']}.csv"
+            
+            with open(path, mode="a", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=["iteration","top1","top5","ZSCL","L2"])
+                if f.tell() == 0:
+                    writer.writeheader()
+                metrics = dict["metrics"]
+                writer.writerow({
+                    "iteration": model_iteration_count,
+                    "top1": metrics["top1"],
+                    "top1": metrics["top5"],
+                    "ZSCL": loss_dict["ZSCL"],
+                    "L2": loss_dict["L2"]
+                })
+            print(f"Saving evaluation results to {path}...")
 
 def handle_signal(signum, frame):
     print(f"Signaled end, {signum}\n Saving...")
@@ -37,6 +62,10 @@ def handle_signal(signum, frame):
     torch.save(checkpoint, path)
     
     print(f"Done saving: \nPath:{path}")
+
+    # if iteration_save%100==0:
+    #     eval_and_save(args_ref, model_ref,)
+
     sys.exit(0)
 
 
@@ -44,10 +73,18 @@ signal.signal(signal.SIGUSR1, handle_signal)
 
 
 def finetune(args):
-    global model_ref, args_ref, iteration_save
+    global model_ref, args_ref, iteration_save, val_preprocess_ref
+    args_ref = args
     model, train_preprocess, val_preprocess = clip.load(args.model, jit=False)
+    
+    model_iteration_count = 0
     if args.load is not None:
         utils.torch_load(model, args.load)
+        
+        checkpoint = torch.load(args.load)
+        model_iteration_count = checkpoint["iteration"]
+        print(f"Loaded checkpoint, total_iterations: {model_iteration_count}")
+    val_preprocess_ref = val_preprocess
 
     if args.we_wise or (args.wise_merge and args.wise_ft_model != "zeroshot"):
         print("Using WiSE-FT with Loaded Model")
@@ -211,9 +248,11 @@ def finetune(args):
     if args.train_mode == "text":
         embeddings = zeroshot_classifier(dataset.classnames, dataset.templates, model)
 
-    
-    checkpoint = torch.load(args.load)
-    model_iteration_count = checkpoint["iteration"]
+
+
+    prev_L2_loss = None
+    prev_ZSCL_loss = None
+
     for iteration in tqdm(range(model_iteration_count, total_iterations + 1)):
         #saving references
         model_ref = model.module
@@ -223,13 +262,28 @@ def finetune(args):
         if args.we or args.we_wise:
             model_ref = we_model
         args_ref = args
+
+        
+
+        if iteration % args.eval_interval == 0:
+            print("Saving accuracies...")
+            torch.cuda.empty_cache()
+            loss_dict = {
+                "ZSCL": prev_ZSCL_loss,
+                "L2": prev_L2_loss
+            }
+            with torch.no_grad():
+                eval_and_save(args, model, val_preprocess, iteration, loss_dict)
+            torch.cuda.empty_cache()    
+
         # evaluation
+        '''
         if eval_iterations is not None and iteration % eval_iterations == 0:
             if args.we or args.we_wise:
                 evaluate(we_model, args, val_preprocess)
             else:
                 evaluate(model.module, args, val_preprocess)
-
+        '''
         # training
         if iteration % num_batches == 0:
             data_iter = iter(dataset.train_loader)
@@ -370,15 +424,18 @@ def finetune(args):
                 merge_we(model.module, we_model, we_n)
             else:
                 wise_we(model.module, we_model, we_n, model_fix, args.we_wise_alpha)
-
+        
         # evaluation
         if iteration % loss_interval == 0:
             print("Loss:", loss.item())
             if args.method == "ZSCL":
-                print("Loss ZSCL:", loss_ZSCL.item())
+                prev_ZSCL_loss = loss_ZSCL.item() 
+                print("Loss ZSCL:", prev_ZSCL_loss)
             if args.l2 > 0:
+                prev_L2_loss = loss_l2.item() 
                 print("Loss L2:", loss_l2.item())
 
+        #
     if args.wise_merge:
         alpha = args.wise_ft_alpha
         if args.wise_ft_model == "zeroshot":

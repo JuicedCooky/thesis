@@ -19,4 +19,4 @@ srun python -m src.main \
     ckpt/test \
     --load ckpt/test/DTD.pth \
     --train-dataset=DTD \
-    --eval-datasets=Flowers,Food,OxfordPet
+    --eval-datasets=Flowers
