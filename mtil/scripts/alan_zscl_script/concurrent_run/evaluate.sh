@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=eval
 #SBATCH --time=00:25:00            # max time
-#SBATCH --mem=32GB                # memory
+#SBATCH --mem=32000M                # memory
 #SBATCH --cpus-per-task=4        # number of CPU cores
 #SBATCH --gres=gpu:1             # request 1 GPU
 #SBATCH --output=/scratch/alanz21/thesis/mtil/logs/%x-%j.out  # output log file
