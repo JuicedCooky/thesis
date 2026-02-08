@@ -214,6 +214,11 @@ def setup_signal_handler():
         saved_model = _training_state.get_saveable_model()
         args = _training_state.args
 
+        # Merge LoRA weights into the base model before saving
+        if args.lora and hasattr(saved_model, "merge_and_unload"):
+            print("[LoRA] Merging adapter weights into base model before saving...")
+            saved_model = saved_model.merge_and_unload()
+
         checkpoint = {
             "iteration": _training_state.iteration,
             "state_dict": saved_model.state_dict(),
@@ -730,6 +735,11 @@ def save_final_model(args, model, we_model, iteration):
         to_save_model = we_model
     else:
         to_save_model = model.module if hasattr(model, "module") else model
+
+    # Merge LoRA weights into the base model before saving
+    if args.lora and hasattr(to_save_model, "merge_and_unload"):
+        print("[LoRA] Merging adapter weights into base model before saving...")
+        to_save_model = to_save_model.merge_and_unload()
 
     checkpoint = {
         "iteration": iteration,
