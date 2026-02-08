@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=training
 #SBATCH --time=02:30:00            # max time
-#SBATCH --mem=32GB                # memory
+#SBATCH --mem=32000M               # memory
 #SBATCH --cpus-per-task=4        # number of CPU cores
 #SBATCH --gres=gpu:h100:1
 #SBATCH --output=/scratch/alanz21/thesis/mtil/logs/%x-%j.out  # output log file

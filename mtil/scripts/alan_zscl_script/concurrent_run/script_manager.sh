@@ -9,8 +9,17 @@ JOB_NAME="lora_finetune"
 PREV_JOB_ID=""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-TRAIN_CMD="sbatch --parsable --job-name=${JOB_NAME}_train_base $SCRIPT_DIR/train.sh DTD $FOLDER_PATH/base \"\" 0"    
-PREV_JOB_ID=$($TRAIN_CMD)
+TRAIN_CMD=(
+    sbatch 
+    --parsable 
+    --job-name=${JOB_NAME}_train_base 
+    $SCRIPT_DIR/train.sh 
+    DTD 
+    $FOLDER_PATH/base 
+    "" 
+    0
+)    
+PREV_JOB_ID=$( "${TRAIN_CMD[@]}" | tr -d ' \n' )
 echo "Initializing base model - Job ID: $PREV_JOB_ID"
 
 sbatch --job-name=${JOB_NAME}_base_eval --dependency=afterok:${PREV_JOB_ID} ${SCRIPT_DIR}/evaluate.sh ${FOLDER_PATH}/base/DTD.pth
@@ -24,8 +33,19 @@ for dataset in $TRAINING_DATASETS
 do
     FOLDER_PATH=$FOLDER_PATH/$dataset
     
-    TRAIN_CMD="sbatch --parsable --job-name=${JOB_NAME}_train_${dataset} --dependency=afterok:$PREV_JOB_ID $SCRIPT_DIR/train.sh $dataset $FOLDER_PATH $PREV_MODEL_PATH $ITERATIONS"
-    PREV_JOB_ID=$($TRAIN_CMD)
+    TRAIN_CMD=(
+        sbatch 
+        --parsable 
+        --job-name=${JOB_NAME}_train_${dataset} 
+        --dependency=afterok:$PREV_JOB_ID 
+        $SCRIPT_DIR/train.sh 
+        $dataset 
+        $FOLDER_PATH 
+        $PREV_MODEL_PATH 
+        $ITERATIONS
+    )
+
+    PREV_JOB_ID=$( "${TRAIN_CMD[@]}" | tr -d ' \n' )
     echo "Queued training - dataset: $dataset - Job ID: $PREV_JOB_ID"
 
     PREV_MODEL_PATH=$FOLDER_PATH/$dataset.pth
