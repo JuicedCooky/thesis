@@ -74,3 +74,24 @@ def paired_loss_new(old_pred, old_true):
     loss_old = loss_old.sum(1)
     loss_old = loss_old.mean() * T * T
     return loss_old
+
+def saving (args, model, iterations):
+    """Save the final model checkpoint."""
+    if args.save is None:
+        return
+
+    if args.we or args.we_wise:
+        to_save_model = we_model
+    else:
+        to_save_model = model.module if hasattr(model, "module") else model
+
+    checkpoint = {
+        "iteration": iterations,
+        "state_dict": to_save_model.state_dict(),
+        "args": args,
+    }
+
+    path = os.path.join(args.save, f"{args.train_dataset}.pth")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(checkpoint, path)
+    print(f"Saved model to {path}")
