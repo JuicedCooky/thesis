@@ -51,7 +51,7 @@ fi
 srun python -m src.main \
     --train-mode=whole \
     --train-dataset=${TARGET_DATASET} \
-    --lr=1e-5\
+    --lr=1e-5 \
     --ls 0.2 \
     --iterations ${4:-5000} \
     --method finetune \
@@ -64,6 +64,6 @@ srun python -m src.main \
     --eval-interval 250 \
     --custom-finetune \
     --max-evaluation-size 500 \
-    ${LOAD:-""} \
+    ${LOAD} \
     ${START_ITERATION} \
     --lora-target-modules "mlp.c_fc.weight,mlp.c_proj.weight"

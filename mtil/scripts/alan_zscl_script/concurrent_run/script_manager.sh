@@ -12,7 +12,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 TRAIN_CMD=(
     sbatch 
     --parsable 
-    --job-name=${JOB_NAME}_train_base 
+    "--job-name=${JOB_NAME}_train_base" 
+    "--time=00:15:00"
     "${SCRIPT_DIR}/train.sh" 
     "DTD" 
     "${FOLDER_PATH}/base" 
