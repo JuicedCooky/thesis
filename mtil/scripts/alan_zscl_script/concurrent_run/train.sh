@@ -40,15 +40,20 @@ START_ITERATION=""
 if [ -f "${SAVE_PATH}/${MODEL_NAME}" ]; then
     LOAD="--load ${SAVE_PATH}/${MODEL_NAME}"
 else
-    LOAD="--load ${PREV_LOAD_PATH}"
-    START_ITERATION="--start-iteration 0"
+    if [ -z "$PREV_LOAD_PATH"]; then
+        LOAD=""
+        START_ITERATION=""
+    else
+        LOAD="--load ${PREV_LOAD_PATH}"
+        START_ITERATION="--start-iteration 0"
+    fi
 fi
 srun python -m src.main \
     --train-mode=whole \
     --train-dataset=${TARGET_DATASET} \
     --lr=1e-5\
     --ls 0.2 \
-    --iterations ${4:5000} \
+    --iterations ${4:-5000} \
     --method finetune \
     --image_loss \
     --text_loss \
@@ -59,6 +64,6 @@ srun python -m src.main \
     --eval-interval 250 \
     --custom-finetune \
     --max-evaluation-size 500 \
-    ${LOAD} \
-    --start-iteration 0 \
+    ${LOAD:-""} \
+    ${START_ITERATION} \
     --lora-target-modules "mlp.c_fc.weight,mlp.c_proj.weight"

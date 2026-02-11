@@ -13,11 +13,11 @@ TRAIN_CMD=(
     sbatch 
     --parsable 
     --job-name=${JOB_NAME}_train_base 
-    $SCRIPT_DIR/train.sh 
-    DTD 
-    $FOLDER_PATH/base 
+    "${SCRIPT_DIR}/train.sh" 
+    "DTD" 
+    "${FOLDER_PATH}/base" 
     "" 
-    0
+    "0"
 )    
 PREV_JOB_ID=$( "${TRAIN_CMD[@]}" | tr -d ' \n' )
 echo "Initializing base model - Job ID: $PREV_JOB_ID"
