@@ -13,12 +13,11 @@ from PIL import Image
 
 
 
-
 def accuracy(output, target, topk=(1,)):
     pred = output.topk(max(topk), 1, True, True)[1].t()
     correct = pred.eq(target.view(1, -1).expand_as(pred))
     return [
-        float(correct[:k].reshape(-1).float().sum(0, keepdim=True).cpu().numpy())
+        correct[:k].reshape(-1).float().sum(0, keepdim=True).item() 
         for k in topk
     ]
 
@@ -33,7 +32,6 @@ def zeroshot_classifier(classnames, templates, model):
         texts = clip.tokenize(texts).cuda()  # tokenize
         class_embeddings = model.encode_text(texts)  # embed with text encoder
         class_embeddings /= class_embeddings.norm(dim=-1, keepdim=True)
-
         class_embedding = class_embeddings.mean(dim=0)
         class_embedding /= class_embedding.norm()
         zeroshot_weights.append(class_embedding)
@@ -60,7 +58,6 @@ def zeroshot_eval(model, loader, zeroshot_weights, args=None):
         # predict
         image_features = model.encode_image(images)
         image_features /= image_features.norm(dim=-1, keepdim=True)
-
         logits = 100.0 * image_features @ zeroshot_weights
 
         # measure accuracy
@@ -100,7 +97,6 @@ def eval_single_dataset(image_classifier, dataset, args):
 def evaluate(image_classifier, args, val_preprocess):
     if args.eval_datasets is None:
         return
-
     for i, dataset_name in enumerate(args.eval_datasets):
         print("Evaluating on", dataset_name)
         dataset_class = getattr(datasets, dataset_name)
@@ -120,7 +116,7 @@ def evaluate(image_classifier, args, val_preprocess):
                 "top1": top1,
                 "top5": top5,
             }
-
+        
         with open(path, mode="a", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["dataset","top1","top5"])
             if f.tell() == 0:
@@ -136,19 +132,19 @@ def eval_single_image(image_classifier, args, val_preprocess):
         image_path = args.eval_single
 
     if args.class_names is None:
-        return
-
+        return 
+    
     #load model
     model = image_classifier
     model.eval()
-
+    
     #loading image
     image = val_preprocess(Image.open(image_path)).unsqueeze(0).to("cuda")
 
     #loading class names
     with open(args.class_names, "r") as file:
         lines = file.readlines()
-
+    
     class_names = [line.strip() for line in lines]
 
     prompts = ""
@@ -161,15 +157,12 @@ def eval_single_image(image_classifier, args, val_preprocess):
 
     with torch.no_grad():
         image_feat = model.encode_image(image)
-        image_feat = image_feat / image_feat.norm(dim=-1, keepdim=True)
-
         text_feat = model.encode_text(text)
-        text_feat = text_feat / text_feat.norm(dim=-1, keepdim=True)
 
-        logit_scale = model.logit_scale.exp()
-        logits_per_image = logit_scale * image_feat @ text_feat.t()
+        logits_per_image, _ = model(image, text)
         probs = logits_per_image.softmax(dim=-1).cpu().numpy()
 
+    # print(probs.tolist()[0])
     result = dict(zip(prompts, probs.tolist()[0]))
     result = dict(sorted(result.items(), key=lambda item: item[1]))
 
@@ -191,7 +184,7 @@ def eval_single_dataset_2(image_classifier, dataset, args):
 
     if hasattr(model, "module"):
         model = model.module
-
+    
     zeroshot_weights = zeroshot_classifier(
         dataset.classnames, dataset.templates, model
     )
@@ -202,6 +195,7 @@ def eval_single_dataset_2(image_classifier, dataset, args):
 
     top1, top5 = zeroshot_eval(model, dataloader, zeroshot_weights, args=args)
     print(f"Top-1 accuracy: {top1:.2f}")
+    # print(f"Top-5 accuracy: {top5:.2f}")
     del dataloader, zeroshot_weights
     torch.cuda.empty_cache()
     gc.collect()
@@ -215,7 +209,6 @@ def evaluate_2(image_classifier, args, val_preprocess):
 
     if args.eval_datasets is None:
         return
-
     for i, dataset_name in enumerate(args.eval_datasets):
         print("Evaluating on", dataset_name)
         dataset_class = getattr(datasets, dataset_name)
@@ -227,7 +220,7 @@ def evaluate_2(image_classifier, args, val_preprocess):
         )
         tops = eval_single_dataset_2(image_classifier, dataset, args)
         dict = {"dataset_name": dataset_name, "metrics": tops}
-
+        
         result.append(dict)
 
         del dataset, tops, dataset_class

@@ -911,8 +911,11 @@ def custom_finetune(args):
         # Update gradient tracking flag
         gradient_tracker.is_tracking = False
         if args.orthogonal_gradients is not None:
-            if iteration % (total_iterations // args.orthogonal_gradients) == 0:
+            if args.iterations == 0:
                 gradient_tracker.is_tracking = True
+            elif iteration % (total_iterations // args.orthogonal_gradients) == 0:
+                gradient_tracker.is_tracking = True
+                
 
         # Update global state
         _training_state.iteration = iteration
