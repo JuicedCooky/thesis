@@ -359,6 +359,13 @@ def parse_arguments():
         choices=["none", "all", "lora_only"],
         help="Which biases to train: 'none', 'all', or 'lora_only'.",
     )
+    parser.add_argument(
+        "--lora-shared",
+        action="store_true",
+        default=False,
+        help="Use custom shared LoRA injection (lora_injection.py) instead of the peft library. "
+             "Shares a single A matrix across all replaced layers; each layer keeps its own B.",
+    )
 
     args = parser.parse_args()
     args.device = "cuda" if torch.cuda.is_available() else "cpu"

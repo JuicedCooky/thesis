@@ -39,6 +39,8 @@ try:
 except ImportError:
     PEFT_AVAILABLE = False
 
+from .lora_injection import inject_shared_lora
+
 
 # =============================================================================
 # Gradient Tracking Utilities
@@ -349,26 +351,17 @@ def setup_lora(args, model):
         model: The CLIP model to apply LoRA to.
 
     Returns:
-        The model wrapped with LoRA adapters.
+        The model with LoRA adapters applied.
     """
     if not args.lora:
         return model
 
-    if not PEFT_AVAILABLE:
-        raise ImportError(
-            "LoRA requires the 'peft' library. Install it with: pip install peft"
-        )
-
-    print("[LoRA] Setting up Low-Rank Adaptation")
-
     # Default target modules for CLIP's attention layers
     if args.lora_target_modules is None:
-        # Target the attention projection layers in both visual and text encoders
         target_modules = [
-            "attn.in_proj_weight",
-            "attn.out_proj.weight",
-            "mlp.c_fc.weight",
-            "mlp.c_proj.weight",
+            "attn.out_proj",
+            "mlp.c_fc",
+            "mlp.c_proj",
         ]
     else:
         target_modules = args.lora_target_modules
@@ -376,6 +369,28 @@ def setup_lora(args, model):
     print(f"[LoRA] Target modules: {target_modules}")
     print(f"[LoRA] Rank (r): {args.lora_r}")
     print(f"[LoRA] Alpha: {args.lora_alpha}")
+
+    if args.lora_shared:
+        print("[LoRA] Using shared LoRA injection (shared A, per-layer B)")
+        model = inject_shared_lora(
+            model,
+            target_modules=target_modules,
+            rank=args.lora_r,
+            alpha=args.lora_alpha,
+            shared_A=True,
+            shared_B=False,
+        )
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in model.parameters())
+        print(f"[LoRA] Trainable parameters: {trainable:,} / {total:,} ({100 * trainable / total:.2f}%)")
+        return model
+
+    if not PEFT_AVAILABLE:
+        raise ImportError(
+            "LoRA requires the 'peft' library. Install it with: pip install peft"
+        )
+
+    print("[LoRA] Setting up Low-Rank Adaptation (peft)")
     print(f"[LoRA] Dropout: {args.lora_dropout}")
     print(f"[LoRA] Bias: {args.lora_bias}")
 
@@ -387,10 +402,7 @@ def setup_lora(args, model):
         bias=args.lora_bias,
     )
 
-    # Apply LoRA to the model
     model = get_peft_model(model, lora_config)
-
-    # Print trainable parameters info
     model.print_trainable_parameters()
 
     return model
