@@ -16,6 +16,7 @@ import os
 import csv
 import signal
 import sys
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List, Any
@@ -237,6 +238,11 @@ def setup_signal_handler():
             _training_state.gradient_tracker.save_gradients(grad_path)
             print(f"Done saving gradients: \nPath:{grad_path}")
 
+        # end_time = time.time()
+        # duration = int(end_time - start_time)
+        # formatted_time = f"{duration//3600}h {(duration//3600)%60}m {duration%60}s"
+        # with open(os.path.join(args.save,"time.txt")) as f:
+        #     f.write(formatted_time)
         sys.exit(0)
 
     signal.signal(signal.SIGUSR1, handle_signal)
@@ -832,6 +838,8 @@ def print_args(args):
 
 
 def custom_finetune(args):
+    # start_time = time.time()
+
     """Main training function with modular organization."""
     global _training_state
 
@@ -1045,3 +1053,8 @@ def custom_finetune(args):
 
     # Save final model
     save_final_model(args, model, we_model, _training_state.iteration)
+    # end_time = time.time()
+    # duration = int(end_time - start_time)
+    # formatted_time = f"{duration//3600}h {(duration//3600)%60}m {duration%60}s"
+    # with open(os.path.join(args.save,"time.txt")) as f:
+    #     f.write(formatted_time)
