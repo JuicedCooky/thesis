@@ -245,7 +245,7 @@ def setup_signal_handler():
 
         end_time = time.time()
         duration = int(end_time - start_time)
-        formatted_time = f"{duration//3600}h {(duration//3600)%60}m {duration%60}s"
+        formatted_time = f"{duration//3600}h {(duration%3600)//60}m {duration%60}s"
         with open(os.path.join(args.save,"time.txt"), "a") as f:
             f.write(formatted_time + "\n")
         sys.exit(0)
@@ -780,7 +780,7 @@ def save_final_model(args, model, we_model, iteration, start_time):
 
     end_time = time.time()
     duration = int(end_time - start_time)
-    formatted_time = f"{duration//3600}h {(duration//3600)%60}m {duration%60}s"
+    formatted_time = f"{duration//3600}h {(duration%3600)//60}m {duration%60}s"
     with open(os.path.join(args.save,"time.txt"), "a") as f:
         f.write(formatted_time + "\n")
 
@@ -966,7 +966,7 @@ def custom_finetune(args):
             loss_dict = {"ZSCL": prev_ZSCL_loss, "L2": prev_L2_loss}
 
             with torch.no_grad():
-                evaluate_and_save(args, model, val_preprocess, iteration+model_iteration_count, loss_dict)
+                evaluate_and_save(args, model, val_preprocess, iteration, loss_dict)
             torch.cuda.empty_cache()
 
         # Reset data iterator at epoch boundary
