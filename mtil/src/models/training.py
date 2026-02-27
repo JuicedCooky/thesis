@@ -1047,7 +1047,7 @@ def custom_finetune(args):
     apply_wise_merge(args, model)
 
     # Save gradient basis (concatenated with previous bases)
-    if args.orthogonal_gradients:
+    if args.orthogonal_gradients is not None:
         basis_per_layer = gradient_tracker.compute_svd_basis()
 
         # Concatenate with previous basis if it exists
