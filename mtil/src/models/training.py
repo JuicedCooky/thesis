@@ -42,7 +42,7 @@ except ImportError:
 
 from .lora_injection import inject_shared_lora, merge_and_unload_shared_lora
 
-
+start_time = None
 # =============================================================================
 # Gradient Tracking Utilities
 # =============================================================================
@@ -206,6 +206,7 @@ _training_state = TrainingState()
 
 def setup_signal_handler():
     """Set up signal handler for graceful interruption."""
+    global start_time
 
     def handle_signal(signum, frame):
         print(f"Signaled end, {signum}\n Saving...")
@@ -245,8 +246,8 @@ def setup_signal_handler():
         end_time = time.time()
         duration = int(end_time - start_time)
         formatted_time = f"{duration//3600}h {(duration//3600)%60}m {duration%60}s"
-        with open(os.path.join(args.save,"time.txt")) as f:
-            f.write(formatted_time)
+        with open(os.path.join(args.save,"time.txt"), "a") as f:
+            f.write(formatted_time + "\n")
         sys.exit(0)
 
     signal.signal(signal.SIGUSR1, handle_signal)
@@ -780,8 +781,8 @@ def save_final_model(args, model, we_model, iteration, start_time):
     end_time = time.time()
     duration = int(end_time - start_time)
     formatted_time = f"{duration//3600}h {(duration//3600)%60}m {duration%60}s"
-    with open(os.path.join(args.save,"time.txt")) as f:
-        f.write(formatted_time)
+    with open(os.path.join(args.save,"time.txt"), "a") as f:
+        f.write(formatted_time + "\n")
 
 
 def apply_wise_merge(args, model):
@@ -852,6 +853,7 @@ def print_args(args):
 
 
 def custom_finetune(args):
+    global start_time
     start_time = time.time()
 
     """Main training function with modular organization."""
