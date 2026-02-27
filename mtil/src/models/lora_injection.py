@@ -62,11 +62,67 @@ class SharedLoRALayer(nn.Module):
         lora_out = (x @ self.lora_A.T @ self.lora_B.T) * self.scaling
         return base_out + lora_out
 
+    def merge(self) -> nn.Linear:
+        """
+        Merge the LoRA delta into the base weight and return a plain nn.Linear.
+
+        Merged weight: W_merged = W_base + (B @ A) * scaling
+          - lora_A: (rank, in_features)
+          - lora_B: (out_features, rank)
+          - B @ A:  (out_features, in_features)  — same shape as W_base
+        """
+        base = self.base_layer
+        delta = (self.lora_B @ self.lora_A) * self.scaling          # (out, in)
+        merged_weight = base.weight.data + delta.to(base.weight.device)
+
+        merged = nn.Linear(
+            base.in_features,
+            base.out_features,
+            bias=base.bias is not None,
+            device=base.weight.device,
+            dtype=base.weight.dtype,
+        )
+        merged.weight = nn.Parameter(merged_weight)
+        if base.bias is not None:
+            merged.bias = nn.Parameter(base.bias.data.clone())
+
+        return merged
+
     def extra_repr(self) -> str:
         return (
             f"rank={self.rank}, scaling={self.scaling}, "
             f"shared_A={not self._owns_A}, shared_B={not self._owns_B}"
         )
+
+
+def merge_and_unload_shared_lora(model: nn.Module) -> nn.Module:
+    """
+    Walk the model and replace every SharedLoRALayer with a merged plain nn.Linear.
+
+    Mirrors peft's model.merge_and_unload():
+      - Computes W_merged = W_base + (B @ A) * scaling for each LoRA layer
+      - Replaces the SharedLoRALayer in-place with the resulting nn.Linear
+      - Returns the same model object (mutation in-place, like peft)
+
+    After this call the model contains no LoRA wrappers and can be saved /
+    loaded without any dependency on lora_injection.py.
+    """
+    # Collect (parent_module, attr_name, lora_layer) to avoid mutating during traversal
+    targets = []
+    for name, module in model.named_modules():
+        if isinstance(module, SharedLoRALayer):
+            parts = name.rsplit(".", 1)
+            parent = model
+            if len(parts) == 2:
+                for part in parts[0].split("."):
+                    parent = getattr(parent, part)
+            targets.append((parent, parts[-1], module))
+
+    for parent, attr, lora_layer in targets:
+        merged_linear = lora_layer.merge()
+        setattr(parent, attr, merged_linear)
+
+    return model
 
 
 def inject_shared_lora(model, target_modules, rank=8, alpha=16.0, shared_A=True, shared_B=False):

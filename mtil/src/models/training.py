@@ -40,7 +40,7 @@ try:
 except ImportError:
     PEFT_AVAILABLE = False
 
-from .lora_injection import inject_shared_lora
+from .lora_injection import inject_shared_lora, merge_and_unload_shared_lora
 
 
 # =============================================================================
@@ -218,9 +218,13 @@ def setup_signal_handler():
         args = _training_state.args
 
         # Merge LoRA weights into the base model before saving
-        if args.lora and hasattr(saved_model, "merge_and_unload"):
-            print("[LoRA] Merging adapter weights into base model before saving...")
-            saved_model = saved_model.merge_and_unload()
+        if args.lora:
+            if args.lora_shared:
+                print("[LoRA] Merging shared LoRA weights into base model before saving...")
+                merge_and_unload_shared_lora(saved_model)
+            elif hasattr(saved_model, "merge_and_unload"):
+                print("[LoRA] Merging adapter weights into base model before saving...")
+                saved_model = saved_model.merge_and_unload()
 
         checkpoint = {
             "iteration": _training_state.iteration,
@@ -238,11 +242,11 @@ def setup_signal_handler():
             _training_state.gradient_tracker.save_gradients(grad_path)
             print(f"Done saving gradients: \nPath:{grad_path}")
 
-        # end_time = time.time()
-        # duration = int(end_time - start_time)
-        # formatted_time = f"{duration//3600}h {(duration//3600)%60}m {duration%60}s"
-        # with open(os.path.join(args.save,"time.txt")) as f:
-        #     f.write(formatted_time)
+        end_time = time.time()
+        duration = int(end_time - start_time)
+        formatted_time = f"{duration//3600}h {(duration//3600)%60}m {duration%60}s"
+        with open(os.path.join(args.save,"time.txt")) as f:
+            f.write(formatted_time)
         sys.exit(0)
 
     signal.signal(signal.SIGUSR1, handle_signal)
@@ -744,7 +748,7 @@ def evaluate_and_save(args, model, val_preprocess, iteration, loss_dict=None):
     torch.cuda.empty_cache()
 
 
-def save_final_model(args, model, we_model, iteration):
+def save_final_model(args, model, we_model, iteration, start_time):
     """Save the final model checkpoint."""
     if args.save is None:
         return
@@ -755,9 +759,13 @@ def save_final_model(args, model, we_model, iteration):
         to_save_model = model.module if hasattr(model, "module") else model
 
     # Merge LoRA weights into the base model before saving
-    if args.lora and hasattr(to_save_model, "merge_and_unload"):
-        print("[LoRA] Merging adapter weights into base model before saving...")
-        to_save_model = to_save_model.merge_and_unload()
+    if args.lora:
+        if args.lora_shared:
+            print("[LoRA] Merging shared LoRA weights into base model before saving...")
+            merge_and_unload_shared_lora(to_save_model)
+        elif hasattr(to_save_model, "merge_and_unload"):
+            print("[LoRA] Merging adapter weights into base model before saving...")
+            to_save_model = to_save_model.merge_and_unload()
 
     checkpoint = {
         "iteration": iteration,
@@ -768,6 +776,12 @@ def save_final_model(args, model, we_model, iteration):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     torch.save(checkpoint, path)
     print(f"Saved model to {path}")
+
+    end_time = time.time()
+    duration = int(end_time - start_time)
+    formatted_time = f"{duration//3600}h {(duration//3600)%60}m {duration%60}s"
+    with open(os.path.join(args.save,"time.txt")) as f:
+        f.write(formatted_time)
 
 
 def apply_wise_merge(args, model):
@@ -838,7 +852,7 @@ def print_args(args):
 
 
 def custom_finetune(args):
-    # start_time = time.time()
+    start_time = time.time()
 
     """Main training function with modular organization."""
     global _training_state
@@ -1052,9 +1066,4 @@ def custom_finetune(args):
         print(f"Saved gradient basis to {basis_path}")
 
     # Save final model
-    save_final_model(args, model, we_model, _training_state.iteration)
-    # end_time = time.time()
-    # duration = int(end_time - start_time)
-    # formatted_time = f"{duration//3600}h {(duration//3600)%60}m {duration%60}s"
-    # with open(os.path.join(args.save,"time.txt")) as f:
-    #     f.write(formatted_time)
+    save_final_model(args, model, we_model, _training_state.iteration, start_time)
