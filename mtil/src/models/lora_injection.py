@@ -57,6 +57,16 @@ class SharedLoRALayer(nn.Module):
             self.lora_B = nn.Parameter(torch.zeros(out_features, rank))
             self._owns_B = True
 
+    @property
+    def weight(self) -> torch.Tensor:
+        """Merged weight matrix W = W_base + (B @ A) * scaling."""
+        delta = (self.lora_B @ self.lora_A) * self.scaling
+        return self.base_layer.weight + delta.to(self.base_layer.weight.device)
+
+    @property
+    def bias(self):
+        return self.base_layer.bias
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         base_out = self.base_layer(x)
         lora_out = (x @ self.lora_A.T @ self.lora_B.T) * self.scaling
@@ -149,7 +159,14 @@ def inject_shared_lora(model, target_modules, rank=8, alpha=16.0, shared_A=True,
                 targets.append((parent, attr, child))
 
     if not targets:
+        print("[LoRA] No matching Linear layers found for target_modules:", target_modules)
         return model
+
+    print(f"[LoRA] Injecting into {len(targets)} layer(s):")
+    for name, child in model.named_modules():
+        if any(name.endswith(t) or name == t for t in target_modules):
+            if isinstance(child, nn.Linear):
+                print(f"  {name}  (in={child.in_features}, out={child.out_features})")
 
     # Build shared parameters keyed by dimension so layers with different
     # in_features / out_features each get their own shared parameter while
