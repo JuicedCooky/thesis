@@ -151,29 +151,39 @@ def inject_shared_lora(model, target_modules, rank=8, alpha=16.0, shared_A=True,
     if not targets:
         return model
 
-    # Build shared parameters once (shape derived from first matching layer)
-    first = targets[0][2]
-    shared_A_param = None
-    shared_B_param = None
+    # Build shared parameters keyed by dimension so layers with different
+    # in_features / out_features each get their own shared parameter while
+    # layers of the same size still share weights.
+    shared_A_params = {}  # in_features  -> nn.Parameter  shape (rank, in_features)
+    shared_B_params = {}  # out_features -> nn.Parameter  shape (out_features, rank)
 
     if shared_A is True:
-        shared_A_param = nn.Parameter(torch.empty(rank, first.in_features))
-        nn.init.kaiming_uniform_(shared_A_param, a=math.sqrt(5))
+        for _, _, child in targets:
+            in_feat = child.in_features
+            if in_feat not in shared_A_params:
+                param = nn.Parameter(torch.empty(rank, in_feat))
+                nn.init.kaiming_uniform_(param, a=math.sqrt(5))
+                shared_A_params[in_feat] = param
     elif isinstance(shared_A, nn.Parameter):
-        shared_A_param = shared_A
+        for _, _, child in targets:
+            shared_A_params[child.in_features] = shared_A
 
     if shared_B is True:
-        shared_B_param = nn.Parameter(torch.zeros(first.out_features, rank))
+        for _, _, child in targets:
+            out_feat = child.out_features
+            if out_feat not in shared_B_params:
+                shared_B_params[out_feat] = nn.Parameter(torch.zeros(out_feat, rank))
     elif isinstance(shared_B, nn.Parameter):
-        shared_B_param = shared_B
+        for _, _, child in targets:
+            shared_B_params[child.out_features] = shared_B
 
     for parent, attr, child in targets:
         lora_layer = SharedLoRALayer(
             base_layer=child,
             rank=rank,
             alpha=alpha,
-            shared_A=shared_A_param,
-            shared_B=shared_B_param,
+            shared_A=shared_A_params.get(child.in_features),
+            shared_B=shared_B_params.get(child.out_features),
         )
         setattr(parent, attr, lora_layer)
 
