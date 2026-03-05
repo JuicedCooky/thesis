@@ -29,25 +29,35 @@ def get_datasets_text(ds, args):
     return ret
 
 def merge_we(model_0, model_1, sma_count):
-    for param_q, param_k in zip(model_0.parameters(), model_1.parameters()):
-        param_k.data = (param_k.data * sma_count + param_q.data) / (1.0 + sma_count)
+    params_0 = dict(model_0.named_parameters())
+    for name, param_k in model_1.named_parameters():
+        if name in params_0:
+            param_k.data = (param_k.data * sma_count + params_0[name].data) / (1.0 + sma_count)
     return model_1
 
 def wise_we(model_0, model_1, sma_count, model_n, alpha=0.95):
-    for param_q, param_k, param_n in zip(model_0.parameters(), model_1.parameters(), model_n.parameters()):
-        param_k.data = (
-                        (param_k.data * sma_count + param_q.data) / (1.0 + sma_count)
-                    ) * alpha + param_n.data * (1-alpha)
+    params_0 = dict(model_0.named_parameters())
+    params_n = dict(model_n.named_parameters())
+    for name, param_k in model_1.named_parameters():
+        if name in params_0 and name in params_n:
+            param_k.data = (
+                (param_k.data * sma_count + params_0[name].data) / (1.0 + sma_count)
+            ) * alpha + params_n[name].data * (1 - alpha)
     return model_1
 
 def moving_avg(model_0, model_1, alpha=0.999):
-    for param_q, param_k in zip(model_0.parameters(), model_1.parameters()):
-        param_q.data = param_q.data * alpha + param_k.data * (1 - alpha)
+    params_1 = dict(model_1.named_parameters())
+    for name, param_q in model_0.named_parameters():
+        if name in params_1:
+            param_q.data = param_q.data * alpha + params_1[name].data * (1 - alpha)
 
 def l2_loss(model, model_ref):
     loss = 0.0
-    for param_q, param_k in zip(model.parameters(), model_ref.parameters()):
-        loss += F.mse_loss(param_q, param_k.detach(), reduction="sum")
+    ref_params = dict(model_ref.named_parameters())
+
+    for name, param_q in model.named_parameters():
+        if name in ref_params and param_q.requires_grad:
+            loss += F.mse_loss(param_q, ref_params[name].detach(), reduction="sum")
     return loss
 
 
