@@ -33,14 +33,9 @@ from .helpers import (
     l2_loss, virtual_vocab, distillation
 )
 
-# Optional LoRA import
-try:
-    from peft import LoraConfig, get_peft_model
-    PEFT_AVAILABLE = True
-except ImportError:
-    PEFT_AVAILABLE = False
+import loratorch as lora
 
-from .lora_injection import inject_shared_lora, merge_and_unload_shared_lora, validate_target_modules
+from .lora_injection import inject_lora, merge_and_unload_lora, validate_target_modules
 
 start_time = None
 # =============================================================================
@@ -220,14 +215,8 @@ def setup_signal_handler():
 
         # Merge LoRA weights into the base model before saving
         if args.lora:
-            if args.lora_shared:
-                print("[LoRA] Merging shared LoRA weights into base model before saving...")
-                merge_and_unload_shared_lora(saved_model)
-            elif hasattr(saved_model, "merge_and_unload"):
-                print("[LoRA] Merging adapter weights into base model before saving...")
-                saved_model = saved_model.merge_and_unload()
-            else:
-                print("[LoRA] WARNING: merge_and_unload not available; saving unmerged peft checkpoint")
+            print("[LoRA] Merging LoRA weights into base model before saving...")
+            merge_and_unload_lora(saved_model)
 
         checkpoint = {
             "iteration": _training_state.iteration,
@@ -357,71 +346,42 @@ def get_trainable_params(args, model):
 
 
 def setup_lora(args, model):
-    """Set up LoRA (Low-Rank Adaptation) for the model.
+    """Set up LoRA (Low-Rank Adaptation) for the model using LoRA-Torch.
 
     Args:
         args: Command-line arguments containing LoRA configuration.
         model: The CLIP model to apply LoRA to.
 
     Returns:
-        The model with LoRA adapters applied.
+        The model with LoRA adapters applied and non-LoRA params frozen.
     """
     if not args.lora:
         return model
 
-    # Default target modules for CLIP's attention layers
+    # Default target modules for CLIP's transformer blocks.
+    # Target "attn" (full MultiheadAttention) rather than "attn.out_proj" because
+    # PyTorch's MHA forward uses weight tensors directly and bypasses out_proj.forward().
     if args.lora_target_modules is None:
-        target_modules = [
-            "attn.out_proj",
-            "mlp.c_fc",
-            "mlp.c_proj",
-        ]
+        target_modules = ["attn", "mlp.c_fc", "mlp.c_proj"]
     else:
         target_modules = args.lora_target_modules
 
     print(f"[LoRA] Target modules: {target_modules}")
     print(f"[LoRA] Rank (r): {args.lora_r}")
     print(f"[LoRA] Alpha: {args.lora_alpha}")
+    print("[LoRA] Using LoRA-Torch injection")
 
-    if args.lora_shared:
-        print("[LoRA] Using shared LoRA injection (shared A, per-layer B)")
-        model = inject_shared_lora(
-            model,
-            target_modules=target_modules,
-            rank=args.lora_r,
-            alpha=args.lora_alpha,
-            shared_A=True,
-            shared_B=False,
-        )
-        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        total = sum(p.numel() for p in model.parameters())
-        for name, param in model.named_parameters():
-            if param.requires_grad:
-                print(f"[LoRA] Trainable layer name: {name}")
-        print(f"[LoRA] Trainable parameters: {trainable:,} / {total:,} ({100 * trainable / total:.2f}%)")
-        return model
-
-    if not PEFT_AVAILABLE:
-        raise ImportError(
-            "LoRA requires the 'peft' library. Install it with: pip install peft"
-        )
-
-    validate_target_modules(model, target_modules)
-
-    print("[LoRA] Setting up Low-Rank Adaptation (peft)")
-    print(f"[LoRA] Dropout: {args.lora_dropout}")
-    print(f"[LoRA] Bias: {args.lora_bias}")
-
-    lora_config = LoraConfig(
-        r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout,
+    model = inject_lora(
+        model,
         target_modules=target_modules,
-        bias=args.lora_bias,
+        rank=args.lora_r,
+        alpha=args.lora_alpha,
     )
+    lora.mark_only_lora_as_trainable(model)
 
-    model = get_peft_model(model, lora_config)
-    model.print_trainable_parameters()
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total = sum(p.numel() for p in model.parameters())
+    print(f"[LoRA] Trainable parameters: {trainable:,} / {total:,} ({100 * trainable / total:.2f}%)")
 
     return model
 
@@ -768,14 +728,8 @@ def save_final_model(args, model, we_model, iteration, start_time):
 
     # Merge LoRA weights into the base model before saving
     if args.lora:
-        if args.lora_shared:
-            print("[LoRA] Merging shared LoRA weights into base model before saving...")
-            merge_and_unload_shared_lora(to_save_model)
-        elif hasattr(to_save_model, "merge_and_unload"):
-            print("[LoRA] Merging adapter weights into base model before saving...")
-            to_save_model = to_save_model.merge_and_unload()
-        else:
-            print("[LoRA] WARNING: merge_and_unload not available; saving unmerged peft checkpoint")
+        print("[LoRA] Merging LoRA weights into base model before saving...")
+        merge_and_unload_lora(to_save_model)
 
     checkpoint = {
         "iteration": iteration,
@@ -1029,6 +983,11 @@ def custom_finetune(args):
         # Backward pass
         optimizer.zero_grad()
         loss.backward()
+
+        # Reregister LoRA params so they appear in state_dict() and parameters()
+        # after the temporary weight merge/unmerge done during forward.
+        if args.lora:
+            lora.register_model_param_after_backward(model)
 
         # Apply OGD gradient projection
         if prev_basis:
