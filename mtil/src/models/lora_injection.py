@@ -135,6 +135,24 @@ def merge_and_unload_shared_lora(model: nn.Module) -> nn.Module:
     return model
 
 
+def validate_target_modules(model: nn.Module, target_modules: list) -> None:
+    """Raise ValueError if any target module name is not found as a Linear layer in the model."""
+    matched = set()
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear):
+            for t in target_modules:
+                if name.endswith(t) or name == t:
+                    matched.add(t)
+
+    unmatched = [t for t in target_modules if t not in matched]
+    if unmatched:
+        available = [name for name, m in model.named_modules() if isinstance(m, nn.Linear)]
+        raise ValueError(
+            f"[LoRA] The following target_modules were not found as Linear layers in the model: {unmatched}\n"
+            f"Available Linear layers:\n  " + "\n  ".join(available)
+        )
+
+
 def inject_shared_lora(model, target_modules, rank=8, alpha=16.0, shared_A=True, shared_B=False):
     """
     Walk model and replace named Linear layers in target_modules with SharedLoRALayer.
@@ -144,6 +162,7 @@ def inject_shared_lora(model, target_modules, rank=8, alpha=16.0, shared_A=True,
       - False → each replaced layer gets its own local parameter
       - nn.Parameter → use the supplied parameter directly
     """
+    validate_target_modules(model, target_modules)
 
     # Collect target (parent, attr_name, child) triples first to avoid mutation during iteration
     targets = []
@@ -157,10 +176,6 @@ def inject_shared_lora(model, target_modules, rank=8, alpha=16.0, shared_A=True,
                         parent = getattr(parent, part)
                 attr = parts[-1]
                 targets.append((parent, attr, child))
-
-    if not targets:
-        print("[LoRA] No matching Linear layers found for target_modules:", target_modules)
-        return model
 
     print(f"[LoRA] Injecting into {len(targets)} layer(s):")
     for name, child in model.named_modules():

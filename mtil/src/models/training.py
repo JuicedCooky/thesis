@@ -40,7 +40,7 @@ try:
 except ImportError:
     PEFT_AVAILABLE = False
 
-from .lora_injection import inject_shared_lora, merge_and_unload_shared_lora
+from .lora_injection import inject_shared_lora, merge_and_unload_shared_lora, validate_target_modules
 
 start_time = None
 # =============================================================================
@@ -226,6 +226,8 @@ def setup_signal_handler():
             elif hasattr(saved_model, "merge_and_unload"):
                 print("[LoRA] Merging adapter weights into base model before saving...")
                 saved_model = saved_model.merge_and_unload()
+            else:
+                print("[LoRA] WARNING: merge_and_unload not available; saving unmerged peft checkpoint")
 
         checkpoint = {
             "iteration": _training_state.iteration,
@@ -393,6 +395,9 @@ def setup_lora(args, model):
         )
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in model.parameters())
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                print(f"[LoRA] Trainable layer name: {name}")
         print(f"[LoRA] Trainable parameters: {trainable:,} / {total:,} ({100 * trainable / total:.2f}%)")
         return model
 
@@ -400,6 +405,8 @@ def setup_lora(args, model):
         raise ImportError(
             "LoRA requires the 'peft' library. Install it with: pip install peft"
         )
+
+    validate_target_modules(model, target_modules)
 
     print("[LoRA] Setting up Low-Rank Adaptation (peft)")
     print(f"[LoRA] Dropout: {args.lora_dropout}")
@@ -767,6 +774,8 @@ def save_final_model(args, model, we_model, iteration, start_time):
         elif hasattr(to_save_model, "merge_and_unload"):
             print("[LoRA] Merging adapter weights into base model before saving...")
             to_save_model = to_save_model.merge_and_unload()
+        else:
+            print("[LoRA] WARNING: merge_and_unload not available; saving unmerged peft checkpoint")
 
     checkpoint = {
         "iteration": iteration,
