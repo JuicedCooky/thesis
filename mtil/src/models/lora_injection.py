@@ -150,11 +150,11 @@ def apply_shared_lora(model: nn.Module, split_qkvo: bool = False) -> nn.Module:
         if isinstance(module, lora.Linear):
             key = (layer_type, module.in_features, module.out_features)
             if key not in registry:
-                registry[key] = {"A": module.lora_A, "B": module.lora_B}
+                registry[key] = {"A": module.w_lora_A, "B": module.w_lora_B}
                 print(f"[LoRA Shared] Registered master for {key} at '{name}'")
             else:
-                module.lora_A = registry[key]["A"]
-                module.lora_B = registry[key]["B"]
+                module.w_lora_A = registry[key]["A"]
+                module.w_lora_B = registry[key]["B"]
                 print(f"[LoRA Shared] Linked '{name}' to master {key}")
 
         elif isinstance(module, lora.MultiheadAttention):
