@@ -380,8 +380,10 @@ def setup_lora(args, model):
     lora.mark_only_lora_as_trainable(model)
 
     if args.lora_shared:
-        print("[LoRA] Applying shared LoRA bases across same-type same-dimension layers...")
-        model = apply_shared_lora(model)
+        split = getattr(args, "lora_shared_split_qkvo", False)
+        mode = "split q/k/v/o across blocks" if split else "all projections share one master per block shape"
+        print(f"[LoRA] Applying shared LoRA bases ({mode})...")
+        model = apply_shared_lora(model, split_qkvo=split)
 
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.parameters())
@@ -793,7 +795,7 @@ def print_args(args):
         "Weight Averaging": ["we", "we_wise", "we_wise_alpha", "moving_avg", "mv_avg_model",
                             "mv_avg_decay", "avg_freq", "wise_merge", "wise_ft_model", "wise_ft_alpha"],
         "OGD": ["orthogonal_gradients", "orthogonal_gradients_path"],
-        "LoRA": ["lora", "lora_r", "lora_alpha", "lora_dropout", "lora_target_modules", "lora_bias", "lora_shared"],
+        "LoRA": ["lora", "lora_r", "lora_alpha", "lora_dropout", "lora_target_modules", "lora_bias", "lora_shared", "lora_shared_split_qkvo"],
         "Evaluation": ["eval_datasets", "eval_interval", "eval_every_epoch", "loss_interval"],
         "Data": ["data_location", "template", "text_datasets", "num"],
     }

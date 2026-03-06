@@ -111,7 +111,7 @@ def inject_lora(
     return model
 
 
-def apply_shared_lora(model: nn.Module) -> nn.Module:
+def apply_shared_lora(model: nn.Module, split_qkvo: bool = False) -> nn.Module:
     """Share LoRA A/B matrices across layers of the same dimension and type.
 
     Groups layers by (layer_type, dim_signature) so that 'attn' and 'mlp' layers
@@ -119,15 +119,22 @@ def apply_shared_lora(model: nn.Module) -> nn.Module:
     encountered layer becomes the master; all subsequent layers with the same key
     have their lora_A / lora_B replaced with the master's tensors.
 
-    Must be called AFTER inject_lora() and lora.mark_only_lora_as_trainable().
+    For lora.MultiheadAttention, loratorch stores per-projection parameters as
+    '{proj}_lora_A' / '{proj}_lora_B' (e.g. 'q_lora_A', 'o_lora_A').
 
     Args:
         model: Model with LoRA layers already injected.
+        split_qkvo: If True, each projection type (q/k/v/o) gets its own shared
+            master across blocks — q shares with q, k with k, etc. If False
+            (default), all active projections within MHA share one master per
+            (embed_dim, num_heads) signature, maximising parameter reuse.
+
+    Must be called AFTER inject_lora() and lora.mark_only_lora_as_trainable().
 
     Returns:
         The same model with shared LoRA parameters.
     """
-    registry = {}  # (layer_type, *dims) -> {'A': param_or_dict, 'B': param_or_dict}
+    registry = {}  # key -> {'A': param, 'B': param}
 
     for name, module in model.named_modules():
         # Determine whether this layer lives inside an attention or MLP block
@@ -151,15 +158,30 @@ def apply_shared_lora(model: nn.Module) -> nn.Module:
                 print(f"[LoRA Shared] Linked '{name}' to master {key}")
 
         elif isinstance(module, lora.MultiheadAttention):
-            # MHA is always an attention layer regardless of name
-            key = ("attn", module.embed_dim, module.num_heads)
-            if key not in registry:
-                registry[key] = {"A": module.lora_A, "B": module.lora_B}
-                print(f"[LoRA Shared] Registered master MHA for {key} at '{name}'")
-            else:
-                module.lora_A = registry[key]["A"]
-                module.lora_B = registry[key]["B"]
-                print(f"[LoRA Shared] Linked MHA '{name}' to master {key}")
+            # loratorch stores per-projection params as '{proj}_lora_A' / '{proj}_lora_B'.
+            # Detect which projections are active by checking attribute existence.
+            active_projs = [p for p in ("q", "k", "v", "o")
+                            if hasattr(module, f"{p}_lora_A")]
+
+            for proj in active_projs:
+                if split_qkvo:
+                    # Each projection type shares its own master across blocks.
+                    # q-layers share with q, k with k, etc.
+                    key = ("attn", proj, module.embed_dim, module.num_heads)
+                else:
+                    # All projections share one master per block shape.
+                    key = ("attn", module.embed_dim, module.num_heads)
+
+                lora_A = getattr(module, f"{proj}_lora_A")
+                lora_B = getattr(module, f"{proj}_lora_B")
+
+                if key not in registry:
+                    registry[key] = {"A": lora_A, "B": lora_B}
+                    print(f"[LoRA Shared] Registered master for {key} at '{name}.{proj}'")
+                else:
+                    setattr(module, f"{proj}_lora_A", registry[key]["A"])
+                    setattr(module, f"{proj}_lora_B", registry[key]["B"])
+                    print(f"[LoRA Shared] Linked '{name}.{proj}' to master {key}")
 
     return model
 

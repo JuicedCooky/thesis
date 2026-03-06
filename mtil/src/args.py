@@ -366,6 +366,15 @@ def parse_arguments():
         help="Use custom shared LoRA injection (lora_injection.py) instead of the peft library. "
              "Shares a single A matrix across all replaced layers; each layer keeps its own B.",
     )
+    parser.add_argument(
+        "--lora-shared-split-qkvo",
+        action="store_true",
+        default=False,
+        help="When used with --lora-shared, keep q/k/v/o projections separate within each "
+             "attention block but still share each projection type across blocks "
+             "(q shares with q, k with k, etc.). "
+             "Without this flag all active projections share one master per block shape.",
+    )
 
     args = parser.parse_args()
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
