@@ -9,7 +9,7 @@ This script loads a CLIP model and prints its structure, including:
 
 Usage:
     python -m src.inspect_clip --model ViT-B/16
-    python -m src.inspect_clip --model ViT-B/16 --verbose
+    python -m src.inspect_clip --model ViT-B/16 --verbose --lora-candidates
 """
 
 import argparse

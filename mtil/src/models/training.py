@@ -35,7 +35,7 @@ from .helpers import (
 
 import loratorch as lora
 
-from .lora_injection import inject_lora, merge_and_unload_lora, validate_target_modules
+from .lora_injection import inject_lora, merge_and_unload_lora, validate_target_modules, apply_shared_lora
 
 start_time = None
 # =============================================================================
@@ -378,6 +378,10 @@ def setup_lora(args, model):
         alpha=args.lora_alpha,
     )
     lora.mark_only_lora_as_trainable(model)
+
+    if args.lora_shared:
+        print("[LoRA] Applying shared LoRA bases across same-type same-dimension layers...")
+        model = apply_shared_lora(model)
 
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.parameters())
@@ -789,7 +793,7 @@ def print_args(args):
         "Weight Averaging": ["we", "we_wise", "we_wise_alpha", "moving_avg", "mv_avg_model",
                             "mv_avg_decay", "avg_freq", "wise_merge", "wise_ft_model", "wise_ft_alpha"],
         "OGD": ["orthogonal_gradients", "orthogonal_gradients_path"],
-        "LoRA": ["lora", "lora_r", "lora_alpha", "lora_dropout", "lora_target_modules", "lora_bias"],
+        "LoRA": ["lora", "lora_r", "lora_alpha", "lora_dropout", "lora_target_modules", "lora_bias", "lora_shared"],
         "Evaluation": ["eval_datasets", "eval_interval", "eval_every_epoch", "loss_interval"],
         "Data": ["data_location", "template", "text_datasets", "num"],
     }

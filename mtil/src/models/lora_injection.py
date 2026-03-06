@@ -111,6 +111,59 @@ def inject_lora(
     return model
 
 
+def apply_shared_lora(model: nn.Module) -> nn.Module:
+    """Share LoRA A/B matrices across layers of the same dimension and type.
+
+    Groups layers by (layer_type, dim_signature) so that 'attn' and 'mlp' layers
+    never share bases even when their dimensions match. Within each group, the first
+    encountered layer becomes the master; all subsequent layers with the same key
+    have their lora_A / lora_B replaced with the master's tensors.
+
+    Must be called AFTER inject_lora() and lora.mark_only_lora_as_trainable().
+
+    Args:
+        model: Model with LoRA layers already injected.
+
+    Returns:
+        The same model with shared LoRA parameters.
+    """
+    registry = {}  # (layer_type, *dims) -> {'A': param_or_dict, 'B': param_or_dict}
+
+    for name, module in model.named_modules():
+        # Determine whether this layer lives inside an attention or MLP block
+        # by scanning the dotted name path for known component names.
+        parts = name.split(".")
+        if any(p == "attn" or p.startswith("attn") for p in parts):
+            layer_type = "attn"
+        elif any(p == "mlp" or p.startswith("mlp") for p in parts):
+            layer_type = "mlp"
+        else:
+            layer_type = "other"
+
+        if isinstance(module, lora.Linear):
+            key = (layer_type, module.in_features, module.out_features)
+            if key not in registry:
+                registry[key] = {"A": module.lora_A, "B": module.lora_B}
+                print(f"[LoRA Shared] Registered master for {key} at '{name}'")
+            else:
+                module.lora_A = registry[key]["A"]
+                module.lora_B = registry[key]["B"]
+                print(f"[LoRA Shared] Linked '{name}' to master {key}")
+
+        elif isinstance(module, lora.MultiheadAttention):
+            # MHA is always an attention layer regardless of name
+            key = ("attn", module.embed_dim, module.num_heads)
+            if key not in registry:
+                registry[key] = {"A": module.lora_A, "B": module.lora_B}
+                print(f"[LoRA Shared] Registered master MHA for {key} at '{name}'")
+            else:
+                module.lora_A = registry[key]["A"]
+                module.lora_B = registry[key]["B"]
+                print(f"[LoRA Shared] Linked MHA '{name}' to master {key}")
+
+    return model
+
+
 def merge_and_unload_lora(model: nn.Module) -> nn.Module:
     """
     Permanently merge LoRA deltas into base weights and replace with plain layers.
