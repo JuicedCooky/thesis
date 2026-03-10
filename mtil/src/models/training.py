@@ -821,6 +821,22 @@ def print_args(args):
     print("\n" + "=" * 60 + "\n")
 
 
+def save_args_to_file(args):
+    """Save training arguments to a txt file in append mode."""
+    if args.save is None:
+        return
+    os.makedirs(args.save, exist_ok=True)
+    path = os.path.join(args.save, "training_config.txt")
+    with open(path, "a") as f:
+        f.write(f"\n{'=' * 60}\n")
+        f.write(f"Run started: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"{'=' * 60}\n")
+        for key, value in sorted(vars(args).items()):
+            f.write(f"  {key}: {value}\n")
+        f.write(f"{'=' * 60}\n")
+    print(f"Saved training config to {path}")
+
+
 def custom_finetune(args):
     global start_time
     start_time = time.time()
@@ -830,6 +846,7 @@ def custom_finetune(args):
 
     # Print arguments
     print_args(args)
+    save_args_to_file(args)
 
     # Initialize signal handler
     setup_signal_handler()
