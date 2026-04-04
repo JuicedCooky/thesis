@@ -232,7 +232,8 @@ Full reference: [`ARGUMENTS.md`](ARGUMENTS.md)
 | `--lora-alpha` | 16 | Scaling factor (effective: alpha/r) |
 | `--lora-dropout` | 0.1 | Dropout on LoRA layers (peft only) |
 | `--lora-target-modules` | `attn.out_proj,mlp.c_fc,mlp.c_proj` | Comma-separated module names |
-| `--lora-shared` | False | Use custom shared-A LoRA instead of peft |
+| `--lora-shared` | False | Use custom shared LoRA injection instead of peft — shares A/B bases across layers via a dimension-keyed lookup |
+| `--lora-shared-split-qkvo` | False | With `--lora-shared`: give each projection type (q/k/v/o) its own shared master instead of one master per attention block shape |
 
 ### Evaluation
 
@@ -255,10 +256,19 @@ python -m src.main --lora --lora-r 8 --lora-alpha 16 ...
 ```
 
 **Custom shared LoRA** (`--lora-shared`):
-Uses [`src/models/lora_injection.py`](src/models/lora_injection.py). Shares a single A matrix across all target layers; each layer keeps its own B. No external dependency.
+Uses [`src/models/lora_injection.py`](src/models/lora_injection.py). After `inject_lora()` places LoRA wrappers, `apply_shared_lora()` walks the model and builds a **lookup registry** keyed by `(layer_type, dim_signature)`. The first layer seen for a given key becomes the *master*; every subsequent layer with the same key has its `lora_A` / `lora_B` tensors replaced with the master's, so all layers in the group literally share the same parameter objects. `layer_type` is inferred from the module path (`attn` vs `mlp`) so attention and MLP layers never share bases even when their dimensions coincide.
+
+By default (`--lora-shared` without `--lora-shared-split-qkvo`) the key for a `MultiheadAttention` block is `("attn", embed_dim, num_heads)`, meaning q/k/v/o projections within each block all share a **single** master A and B — maximum parameter reuse across transformer layers.
 
 ```bash
 python -m src.main --lora --lora-shared --lora-r 8 --lora-alpha 16 ...
+```
+
+**Split-QKVO mode** (`--lora-shared --lora-shared-split-qkvo`):
+Adds the projection name to the lookup key: `("attn", proj, embed_dim, num_heads)`. Each projection type (q, k, v, o) gets its own shared master across blocks — q-layers share with q, k with k, etc. — but projections of different types do not share. This trades some parameter efficiency for greater expressiveness per projection type.
+
+```bash
+python -m src.main --lora --lora-shared --lora-shared-split-qkvo --lora-r 8 --lora-alpha 16 ...
 ```
 
 Inspect available layer names for targeting:
