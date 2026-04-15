@@ -317,6 +317,12 @@ def parse_arguments():
     # parser.add_argument("--orthogonal-gradients", action="store_true", default=False)
     parser.add_argument("--orthogonal-gradients", type=int, default=None)
     parser.add_argument("--orthogonal-gradients-path", type=str, default=None)
+    parser.add_argument("--sfao", action="store_true", default=False,
+                        help="Use SFAO (Selective Gradient Projection) instead of standard OGD.")
+    parser.add_argument("--sfao-lambda-proj", type=float, default=0.0,
+                        help="SFAO lower threshold: gradients with s_t <= lambda_proj are discarded.")
+    parser.add_argument("--sfao-lambda-accept", type=float, default=0.9,
+                        help="SFAO upper threshold: gradients with s_t > lambda_accept are accepted unchanged.")
     parser.add_argument("--untrained", action="store_true", default=False)
     parser.add_argument("--custom-finetune", action="store_true", default=False)
     parser.add_argument("--max-evaluation-size", type=int, default=None)

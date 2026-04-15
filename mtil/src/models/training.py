@@ -632,6 +632,70 @@ def apply_ogd_gradient_projection(model, gradients_per_layer, prev_basis):
         param.grad = gradient.view_as(param)
 
 
+def apply_sfao_gradient_projection(
+    model, gradients_per_layer, prev_basis, lambda_proj: float, lambda_accept: float
+):
+    """Apply SFAO (Selective Feature Averaging and Orthogonalization) gradient projection.
+
+    For each layer gradient g_t, computes the cosine similarity with the protected
+    subspace spanned by previous task gradients, then applies a three-way gating rule:
+
+        s_t = ||B @ g_t|| / ||g_t||   (max cosine sim with protected subspace)
+
+        ACCEPT  if s_t > lambda_accept  →  u_t = g_t          (gradient reinforces past tasks)
+        PROJECT if lambda_proj < s_t ≤ lambda_accept  →  u_t = (I - B^T B) g_t
+        DISCARD if s_t ≤ lambda_proj   →  u_t = 0             (gradient conflicts with past tasks)
+
+    Reference: https://arxiv.org/pdf/2603.26671 (Algorithm 1 / Equation 8)
+
+    Args:
+        model: The model being trained
+        gradients_per_layer: Dict mapping layer names to lists of gradient tensors
+        prev_basis: Dict mapping layer names to orthonormal basis tensors [r, d]
+        lambda_proj: Lower cosine-similarity threshold; gradients below this are discarded
+        lambda_accept: Upper cosine-similarity threshold; gradients above this are accepted
+    """
+    new_gradients = {}
+    n_accept = n_project = n_discard = 0
+
+    for name, gradient_list in gradients_per_layer.items():
+        gradient = gradient_list[-1].to("cuda:0")
+
+        if name not in prev_basis:
+            new_gradients[name] = gradient
+            continue
+
+        B = prev_basis[name].to(gradient.device)  # [r, d]
+        proj_coeffs = B @ gradient                # [r]
+        grad_norm = gradient.norm()
+
+        s_t = (proj_coeffs.norm() / grad_norm).item() if grad_norm > 1e-10 else 0.0
+
+        if s_t > lambda_accept:
+            # ACCEPT: gradient aligns with protected subspace — no modification needed
+            n_accept += 1
+        elif s_t > lambda_proj:
+            # PROJECT: remove the component lying in the protected subspace
+            gradient = gradient - B.T @ proj_coeffs
+            n_project += 1
+        else:
+            # DISCARD: gradient is orthogonal to or opposing past-task directions
+            gradient = torch.zeros_like(gradient)
+            n_discard += 1
+
+        new_gradients[name] = gradient
+
+    # Apply modified gradients back to model parameters
+    param_dict = dict(model.named_parameters())
+    for name, gradient in new_gradients.items():
+        if name not in param_dict:
+            continue
+        param = param_dict[name]
+        param.grad = gradient.view_as(param)
+
+    return n_accept, n_project, n_discard
+
+
 def apply_weight_averaging(args, model, we_model, we_n, model_fix, iteration):
     """Apply weight averaging update."""
     if not ((args.we or args.moving_avg or args.we_wise) and iteration % args.avg_freq == 0):
@@ -794,7 +858,7 @@ def print_args(args):
         "Regularization": ["l2", "freeze"],
         "Weight Averaging": ["we", "we_wise", "we_wise_alpha", "moving_avg", "mv_avg_model",
                             "mv_avg_decay", "avg_freq", "wise_merge", "wise_ft_model", "wise_ft_alpha"],
-        "OGD": ["orthogonal_gradients", "orthogonal_gradients_path"],
+        "OGD": ["orthogonal_gradients", "orthogonal_gradients_path", "sfao", "sfao_lambda_proj", "sfao_lambda_accept"],
         "LoRA": ["lora", "lora_r", "lora_alpha", "lora_dropout", "lora_target_modules", "lora_bias", "lora_shared", "lora_shared_split_qkvo"],
         "Evaluation": ["eval_datasets", "eval_interval", "eval_every_epoch", "loss_interval"],
         "Data": ["data_location", "template", "text_datasets", "num"],
@@ -821,6 +885,22 @@ def print_args(args):
     print("\n" + "=" * 60 + "\n")
 
 
+def save_args_to_file(args):
+    """Save training arguments to a txt file in append mode."""
+    if args.save is None:
+        return
+    os.makedirs(args.save, exist_ok=True)
+    path = os.path.join(args.save, "training_config.txt")
+    with open(path, "a") as f:
+        f.write(f"\n{'=' * 60}\n")
+        f.write(f"Run started: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"{'=' * 60}\n")
+        for key, value in sorted(vars(args).items()):
+            f.write(f"  {key}: {value}\n")
+        f.write(f"{'=' * 60}\n")
+    print(f"Saved training config to {path}")
+
+
 def custom_finetune(args):
     global start_time
     start_time = time.time()
@@ -830,6 +910,7 @@ def custom_finetune(args):
 
     # Print arguments
     print_args(args)
+    save_args_to_file(args)
 
     # Initialize signal handler
     setup_signal_handler()
@@ -995,11 +1076,20 @@ def custom_finetune(args):
         if args.lora:
             lora.register_model_param_after_backward(model)
 
-        # Apply OGD gradient projection
+        # Apply gradient projection (OGD or SFAO)
         if prev_basis:
-            apply_ogd_gradient_projection(
-                model, gradient_tracker.gradients_per_layer, prev_basis
-            )
+            if args.sfao:
+                n_accept, n_project, n_discard = apply_sfao_gradient_projection(
+                    model, gradient_tracker.gradients_per_layer, prev_basis,
+                    lambda_proj=args.sfao_lambda_proj,
+                    lambda_accept=args.sfao_lambda_accept,
+                )
+                if iteration % loss_interval == 0:
+                    print(f"  [SFAO] accept={n_accept} project={n_project} discard={n_discard}")
+            else:
+                apply_ogd_gradient_projection(
+                    model, gradient_tracker.gradients_per_layer, prev_basis
+                )
 
         # Optimizer step
         optimizer.step()
