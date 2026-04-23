@@ -1,3 +1,5 @@
+Repository of Frontend Demo: [`https://github.com/JuicedCooky/zscl_ui`]()
+
 # MTIL — Multi-Task Incremental Learning with CLIP
 
 Research framework for continual learning on vision-language models, built on top of OpenAI's CLIP.
