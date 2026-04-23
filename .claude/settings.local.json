@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show:*)",
+      "Bash(python plotting/dataset_examples.py)",
+      "Bash(python backwards_bar.py)"
+    ]
+  }
+}
