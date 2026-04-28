@@ -6,30 +6,46 @@ This document describes the plotting utilities available in `src/plot.py` for vi
 
 | Mode | Command |
 |------|---------|
-| t-SNE from dataset | `--tsne --dataset CIFAR100` |
-| t-SNE with text embeddings | `--tsne --dataset DTD --include-text` |
-| t-SNE all small datasets | `--tsne --all-datasets` |
-| t-SNE dataset preset | `--tsne --dataset-preset imagenet` |
-| t-SNE from embeddings | `--tsne --embeddings file.npy` |
-| t-SNE from image directory | `--tsne --image-dir ./images` |
-| t-SNE all models in directory | `--tsne --model-dir ckpt/models/ --dataset DTD` |
+| t-SNE from dataset (PNG) | `--tsne --dataset CIFAR100 --save-path tsne.png` |
+| t-SNE from dataset (CSV) | `--tsne --dataset CIFAR100 --csv-path tsne.csv` |
+| t-SNE both PNG and CSV | `--tsne --dataset CIFAR100 --save-path tsne.png --csv-path tsne.csv` |
+| t-SNE in 3D | `--tsne --dataset CIFAR100 --save-path tsne.png --3d` |
+| t-SNE with text embeddings | `--tsne --dataset DTD --include-text --save-path tsne.png` |
+| t-SNE all small datasets | `--tsne --all-datasets --save-path tsne.png` |
+| t-SNE dataset preset | `--tsne --dataset-preset imagenet --save-path tsne.png` |
+| t-SNE from embeddings | `--tsne --embeddings file.npy --save-path tsne.png` |
+| t-SNE from image directory | `--tsne --image-dir ./images --save-path tsne.png` |
+| t-SNE all models in directory | `--tsne --model-dir ckpt/models/ --dataset DTD --save-path out/` |
 | Training metrics | `--single --path ./ckpt/exp` |
 | Sequential results | `--all --path ./ckpt/exp` |
-| Model comparison | `--result-paths model1/results.csv model2/results.csv` |
+| Model comparison | `--result-paths model1/results.csv model2/results.csv --save-path compare.png` |
 
 ---
 
 ## t-SNE Visualization
 
-Generate t-SNE plots to visualize high-dimensional embeddings in 2D space.
+Generate t-SNE plots to visualize high-dimensional embeddings in 2D or 3D space.
+
+Output modes:
+- `--save-path`: render and save a PNG (2D or 3D)
+- `--csv-path`: save raw coordinates as `x, y[, z], label, classname, dataset`
+- Both flags together: produce both outputs from a single t-SNE run
 
 ### From Dataset (Recommended)
 
 Use the existing dataset loaders to extract embeddings with proper preprocessing and class labels.
 
 ```bash
-# Basic usage with pretrained CLIP
+# Basic usage — save PNG
 python -m src.plot --tsne --dataset CIFAR100 --save-path tsne.png
+
+# Save CSV of coordinates instead of (or in addition to) PNG
+python -m src.plot --tsne --dataset CIFAR100 --csv-path tsne.csv
+python -m src.plot --tsne --dataset CIFAR100 --save-path tsne.png --csv-path tsne.csv
+
+# 3D t-SNE (PNG render + CSV)
+python -m src.plot --tsne --dataset CIFAR100 --save-path tsne.png --3d
+python -m src.plot --tsne --dataset CIFAR100 --save-path tsne.png --csv-path tsne.csv --3d
 
 # With finetuned model
 python -m src.plot --tsne --dataset DTD --model-path ckpt/model.pth --save-path tsne.png
@@ -79,9 +95,7 @@ python -m src.plot --tsne --dataset-preset all \
 
 ### All Models in a Directory
 
-Use `--model-dir` to generate one t-SNE per `.pth` checkpoint found in a directory. `--save-path` becomes the output **directory** (created if needed), and each plot is saved as `{model_name}_tsne.png`.
-
-Combine with `--all-datasets` or `--dataset-preset` to run across all models and all datasets in one command.
+Use `--model-dir` to generate one t-SNE per `.pth` checkpoint found in a directory. `--save-path` becomes the output **directory** (created if needed), and each plot is saved as `{model_name}_tsne.png`. Use `--csv-path` as a directory to also emit one CSV per checkpoint.
 
 ```bash
 # One t-SNE per model, single dataset
@@ -89,6 +103,14 @@ python -m src.plot --tsne \
     --model-dir ckpt/models/ \
     --dataset DTD \
     --save-path tsne_output/ \
+    --max-samples 500
+
+# One t-SNE + CSV per model
+python -m src.plot --tsne \
+    --model-dir ckpt/models/ \
+    --dataset DTD \
+    --save-path tsne_output/ \
+    --csv-path csv_output/ \
     --max-samples 500
 
 # One t-SNE per model, multiple datasets combined
@@ -125,6 +147,9 @@ python -m src.plot --tsne \
 ```bash
 # Basic usage with numpy file
 python -m src.plot --tsne --embeddings embeddings.npy --save-path tsne.png
+
+# Save CSV instead of PNG
+python -m src.plot --tsne --embeddings embeddings.npy --csv-path tsne.csv
 
 # With labels for coloring
 python -m src.plot --tsne --embeddings embeddings.npy --labels labels.npy --save-path tsne.png
@@ -192,14 +217,38 @@ python -m src.plot --tsne --image-dir ./data/images --texts "cat" "dog" "bird" -
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `--save-path` | None | Save PNG plot (required if `--csv-path` not given) |
+| `--csv-path` | None | Save coordinates as CSV (required if `--save-path` not given) |
+| `--3d` | False | Use 3D t-SNE instead of 2D |
 | `--perplexity` | 30 | t-SNE perplexity (typically 5-50) |
 | `--batch-size` | 32 | Batch size for embedding extraction |
 | `--max-samples` | None | Maximum samples from dataset |
 | `--max-images` | None | Maximum images from directory |
 | `--device` | cuda | Device for model inference |
-| `--model-name` | ViT-B/32 | CLIP architecture |
+| `--model-name` | ViT-B/16 | CLIP architecture |
 | `--split` | test | Dataset split (train/test) |
 | `--include-text` | False | Include text embeddings from class names |
+| `--clean` | False | Strip title, axis labels, ticks, and legend from PNG |
+
+### CSV Output Format
+
+When `--csv-path` is used, each row corresponds to one sample:
+
+```csv
+x,y,label,classname,dataset
+-12.3,4.5,0,tabby cat,CIFAR100
+...
+```
+
+With `--3d`:
+
+```csv
+x,y,z,label,classname,dataset
+-12.3,4.5,7.1,0,tabby cat,CIFAR100
+...
+```
+
+When using multiple datasets (`--datasets`), class names are stored as `"Dataset:classname"` in the source data; the CSV splits these into separate `classname` and `dataset` columns automatically.
 
 ---
 
@@ -320,8 +369,10 @@ embeddings, tsne_coords = plot_tsne_from_dataset(
     data_location="./data",
     split="test",
     max_samples=5000,
-    include_text=True,           # Include text embeddings from class names
+    include_text=True,
     save_path="tsne.png",
+    csv_path="tsne.csv",          # optional: also save coordinates
+    n_components=2,               # 2 or 3
     title="CIFAR-100 Embeddings",
     perplexity=30,
 )
@@ -352,6 +403,9 @@ embeddings = np.random.randn(100, 512)
 labels = np.repeat(range(10), 10)
 tsne_coords = plot_tsne(embeddings, labels=labels, save_path="tsne.png")
 
+# Save CSV only (no PNG rendered)
+tsne_coords = plot_tsne(embeddings, labels=labels, csv_path="tsne.csv")
+
 # Full customization
 tsne_coords = plot_tsne(
     embeddings,                          # numpy array or torch tensor
@@ -359,6 +413,8 @@ tsne_coords = plot_tsne(
     class_names=["cat", "dog", "bird"],  # optional class name mapping
     title="My Embeddings",
     save_path="output.png",
+    csv_path="output.csv",
+    n_components=3,                      # 2 or 3
     perplexity=30,
     n_iter=1000,
     figsize=(10, 8),
@@ -378,6 +434,8 @@ embeddings, tsne_coords = plot_tsne_from_model(
     model_path="ckpt/model.pth",
     image_dir="./data/images",
     save_path="tsne.png",
+    csv_path="tsne.csv",
+    n_components=2,
     title="CLIP Embeddings",
     perplexity=30,
     batch_size=32,
@@ -426,7 +484,7 @@ Plotting utilities for CLIP model analysis
 
 General arguments:
   --path PATH           Path to directory for metrics/results
-  --save-path PATH      Path to save output plot
+  --save-path PATH      Path to save output PNG plot
   --title TITLE         Plot title
 
 Mode selection:
@@ -442,14 +500,18 @@ Model comparison:
   --top5                Use top-5 accuracy instead of top-1
 
 t-SNE arguments:
-  --tsne                Generate t-SNE plot
+  --tsne                Generate t-SNE (requires --save-path and/or --csv-path)
   --embeddings PATH     Path to embeddings file (.npy or .pt)
   --labels PATH         Path to labels file (.npy or .pt)
   --perplexity N        t-SNE perplexity (default: 30)
+  --clean               Strip title, axis labels, ticks, and legend from PNG
+  --3d                  Use 3D t-SNE instead of 2D
+  --csv-path PATH       Save t-SNE coordinates as CSV instead of (or alongside) PNG
+                        Columns: x, y[, z], label, classname, dataset
 
 t-SNE from model:
   --model-path PATH     Path to model checkpoint for embedding extraction
-  --model-name NAME     CLIP architecture (default: ViT-B/32)
+  --model-name NAME     CLIP architecture (default: ViT-B/16)
   --image-dir DIR       Directory containing images for t-SNE
   --image-paths PATH [PATH ...]
                         List of image paths for t-SNE
@@ -469,6 +531,7 @@ t-SNE from dataset:
   --max-samples N       Maximum samples to process from dataset
   --max-classes N       Maximum number of classes to include
   --include-text        Include text embeddings from class names
+  --balance-classes     Redistribute unused class quota evenly across datasets
 
 Dataset presets (mutually exclusive with --datasets):
   --all-datasets        Use all 12 small auto-download datasets
@@ -477,12 +540,46 @@ Dataset presets (mutually exclusive with --datasets):
 
 Batch model processing:
   --model-dir DIR       Directory of .pth checkpoints; generates one
-                        t-SNE per model, --save-path becomes output dir
+                        t-SNE per model. --save-path and --csv-path
+                        become output directories.
 ```
 
 ---
 
 ## Examples
+
+### Save CSV for Downstream Analysis
+
+```bash
+# Coordinates only — no matplotlib dependency at render time
+python -m src.plot --tsne \
+    --dataset CIFAR100 \
+    --model-path ckpt/model.pth \
+    --csv-path results/cifar100_tsne.csv
+
+# Both PNG and CSV in one pass
+python -m src.plot --tsne \
+    --dataset CIFAR100 \
+    --model-path ckpt/model.pth \
+    --save-path results/cifar100_tsne.png \
+    --csv-path results/cifar100_tsne.csv
+```
+
+### 3D t-SNE
+
+```bash
+# 3D PNG render
+python -m src.plot --tsne \
+    --dataset DTD \
+    --save-path dtd_3d.png \
+    --3d
+
+# 3D CSV (x, y, z columns)
+python -m src.plot --tsne \
+    --dataset DTD \
+    --csv-path dtd_3d.csv \
+    --3d
+```
 
 ### Visualizing Dataset Embeddings with Text Alignment
 
@@ -521,27 +618,19 @@ python -m src.plot \
 ### Batch Processing Multiple Datasets
 
 ```bash
-# Old: shell loop over individual datasets
-for dataset in CIFAR10 CIFAR100 DTD Flowers; do
-    python -m src.plot --tsne \
-        --dataset $dataset \
-        --model-path ckpt/model.pth \
-        --save-path plots/${dataset}_tsne.png \
-        --max-samples 2000
-done
-
-# New: all small datasets in one command
+# All small datasets in one command
 python -m src.plot --tsne \
     --all-datasets \
     --model-path ckpt/model.pth \
     --save-path plots/all_small_tsne.png \
     --max-samples 2000
 
-# New: all models × all small datasets
+# All models × all small datasets, PNG + CSV
 python -m src.plot --tsne \
     --model-dir ckpt/models/ \
     --all-datasets \
     --save-path plots/ \
+    --csv-path csvs/ \
     --max-samples 500 --max-classes 5
 ```
 
