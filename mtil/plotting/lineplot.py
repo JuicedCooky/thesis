@@ -22,7 +22,7 @@ methods = {
     "ZSCL+ShareLoRA": sharelora,
     "ZSCL+LoRA":      lora,
     "ZSCL":      zscl,
-    # "Finetune":  finetune,
+    "Finetune":  finetune,
 }
 
 fig, ax = plt.subplots(figsize=(8, 5))
@@ -41,5 +41,5 @@ ax.legend()
 ax.grid(True, linestyle="--", alpha=0.5)
 
 plt.tight_layout()
-plt.savefig(r"a:\thesis\thesis\mtil\plotting\lineplot.png", dpi=150)
+plt.savefig(r"a:\thesis\thesis\mtil\plotting\lineplot.png", dpi=300)
 plt.show()

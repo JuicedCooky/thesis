@@ -41,5 +41,5 @@ ax.legend()
 ax.grid(True, linestyle="--", alpha=0.5)
 
 plt.tight_layout()
-plt.savefig(r"a:\thesis\thesis\mtil\plotting\lineplot_trained_only.png", dpi=150)
+plt.savefig(r"a:\thesis\thesis\mtil\plotting\lineplot_trained_only.png", dpi=300)
 plt.show()

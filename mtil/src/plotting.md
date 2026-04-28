@@ -8,8 +8,11 @@ This document describes the plotting utilities available in `src/plot.py` for vi
 |------|---------|
 | t-SNE from dataset | `--tsne --dataset CIFAR100` |
 | t-SNE with text embeddings | `--tsne --dataset DTD --include-text` |
+| t-SNE all small datasets | `--tsne --all-datasets` |
+| t-SNE dataset preset | `--tsne --dataset-preset imagenet` |
 | t-SNE from embeddings | `--tsne --embeddings file.npy` |
 | t-SNE from image directory | `--tsne --image-dir ./images` |
+| t-SNE all models in directory | `--tsne --model-dir ckpt/models/ --dataset DTD` |
 | Training metrics | `--single --path ./ckpt/exp` |
 | Sequential results | `--all --path ./ckpt/exp` |
 | Model comparison | `--result-paths model1/results.csv model2/results.csv` |
@@ -45,6 +48,62 @@ python -m src.plot --tsne --dataset CIFAR100 --data-location /path/to/data --sav
 
 # CPU inference
 python -m src.plot --tsne --dataset MNIST --device cpu --save-path tsne.png
+```
+
+### Dataset Presets
+
+Use `--all-datasets` or `--dataset-preset` to select a predefined group of datasets instead of listing them individually. These are mutually exclusive with `--datasets`.
+
+| Preset | Datasets | Notes |
+|--------|----------|-------|
+| `small` | Aircraft, Caltech101, CIFAR10, CIFAR100, DTD, EuroSAT, Flowers, Food, MNIST, OxfordPet, StanfordCars, SUN397 | Auto-download |
+| `imagenet` | ImageNet, ImageNetA, ImageNetR, ImageNetSketch, ImageNetSM, ImageNetSUB, ImageNetSC, ImageNetV2 | Require manual download |
+| `all` | small + imagenet | Mix of auto and manual |
+
+```bash
+# All 12 small auto-download datasets combined into one t-SNE
+python -m src.plot --tsne --all-datasets --save-path tsne_all.png --max-classes 5
+
+# Equivalent using --dataset-preset
+python -m src.plot --tsne --dataset-preset small --save-path tsne_small.png
+
+# ImageNet variants only
+python -m src.plot --tsne --dataset-preset imagenet \
+    --model-path ckpt/model.pth --save-path tsne_imagenet.png --max-samples 2000
+
+# All datasets with a finetuned model (limit samples for speed)
+python -m src.plot --tsne --dataset-preset all \
+    --model-path ckpt/model.pth --save-path tsne_full.png \
+    --max-samples 500 --max-classes 5
+```
+
+### All Models in a Directory
+
+Use `--model-dir` to generate one t-SNE per `.pth` checkpoint found in a directory. `--save-path` becomes the output **directory** (created if needed), and each plot is saved as `{model_name}_tsne.png`.
+
+Combine with `--all-datasets` or `--dataset-preset` to run across all models and all datasets in one command.
+
+```bash
+# One t-SNE per model, single dataset
+python -m src.plot --tsne \
+    --model-dir ckpt/models/ \
+    --dataset DTD \
+    --save-path tsne_output/ \
+    --max-samples 500
+
+# One t-SNE per model, multiple datasets combined
+python -m src.plot --tsne \
+    --model-dir ckpt/models/ \
+    --datasets DTD EuroSAT CIFAR100 \
+    --save-path tsne_output/ \
+    --max-classes 5
+
+# One t-SNE per model, all small datasets
+python -m src.plot --tsne \
+    --model-dir ckpt/models/ \
+    --all-datasets \
+    --save-path tsne_output/ \
+    --max-samples 200 --max-classes 5
 ```
 
 #### Available Datasets
@@ -403,10 +462,22 @@ t-SNE from model:
 
 t-SNE from dataset:
   --dataset NAME        Dataset name (e.g., CIFAR100, DTD, ImageNet)
+  --datasets NAME [NAME ...]
+                        Multiple dataset names for combined t-SNE
   --data-location PATH  Root directory for datasets (default: ./data)
   --split {train,test}  Dataset split (default: test)
   --max-samples N       Maximum samples to process from dataset
+  --max-classes N       Maximum number of classes to include
   --include-text        Include text embeddings from class names
+
+Dataset presets (mutually exclusive with --datasets):
+  --all-datasets        Use all 12 small auto-download datasets
+  --dataset-preset {small,imagenet,all}
+                        Predefined dataset group
+
+Batch model processing:
+  --model-dir DIR       Directory of .pth checkpoints; generates one
+                        t-SNE per model, --save-path becomes output dir
 ```
 
 ---
@@ -450,6 +521,7 @@ python -m src.plot \
 ### Batch Processing Multiple Datasets
 
 ```bash
+# Old: shell loop over individual datasets
 for dataset in CIFAR10 CIFAR100 DTD Flowers; do
     python -m src.plot --tsne \
         --dataset $dataset \
@@ -457,6 +529,20 @@ for dataset in CIFAR10 CIFAR100 DTD Flowers; do
         --save-path plots/${dataset}_tsne.png \
         --max-samples 2000
 done
+
+# New: all small datasets in one command
+python -m src.plot --tsne \
+    --all-datasets \
+    --model-path ckpt/model.pth \
+    --save-path plots/all_small_tsne.png \
+    --max-samples 2000
+
+# New: all models × all small datasets
+python -m src.plot --tsne \
+    --model-dir ckpt/models/ \
+    --all-datasets \
+    --save-path plots/ \
+    --max-samples 500 --max-classes 5
 ```
 
 ### Large Dataset Visualization

@@ -7,6 +7,7 @@ This module provides functions for:
 - Model comparison bar charts
 """
 
+import math
 import matplotlib.pyplot as plt
 import csv
 import os
@@ -21,6 +22,29 @@ from tqdm import tqdm
 import clip
 
 # =============================================================================
+# Dataset Presets
+# =============================================================================
+
+SMALL_DATASETS = [
+    "Aircraft", "Caltech101", "CIFAR10", "CIFAR100", "DTD",
+    "EuroSAT", "Flowers", "Food", "MNIST", "OxfordPet",
+    "StanfordCars", "SUN397",
+]
+
+IMAGENET_DATASETS = [
+    "ImageNet", "ImageNetA", "ImageNetR", "ImageNetSketch",
+    "ImageNetSM", "ImageNetSUB", "ImageNetSC", "ImageNetV2",
+]
+
+ALL_DATASETS = SMALL_DATASETS + IMAGENET_DATASETS
+
+DATASET_PRESETS = {
+    "small": SMALL_DATASETS,
+    "imagenet": IMAGENET_DATASETS,
+    "all": ALL_DATASETS,
+}
+
+# =============================================================================
 # t-SNE Visualization Functions
 # =============================================================================
 
@@ -30,6 +54,8 @@ def plot_tsne(
     class_names=None,
     title="t-SNE Visualization",
     save_path=None,
+    csv_path=None,
+    n_components=2,
     perplexity=30,
     n_iter=1000,
     random_state=42,
@@ -37,6 +63,7 @@ def plot_tsne(
     alpha=0.7,
     cmap="tab20",
     show_legend=True,
+    clean=False,
 ):
     """
     Create a t-SNE plot from embeddings.
@@ -46,7 +73,9 @@ def plot_tsne(
         labels: optional array of integer labels for coloring points (n_samples,)
         class_names: optional list of class names corresponding to label indices
         title: plot title
-        save_path: path to save the figure (if None, displays the plot)
+        save_path: path to save the PNG figure (if None and csv_path set, skips plotting)
+        csv_path: path to save t-SNE coordinates as CSV (x, y[, z], label, classname, dataset)
+        n_components: number of t-SNE dimensions, 2 or 3
         perplexity: t-SNE perplexity parameter (typically 5-50)
         n_iter: number of iterations for t-SNE optimization
         random_state: random seed for reproducibility
@@ -56,8 +85,10 @@ def plot_tsne(
         show_legend: whether to show legend when labels are provided
 
     Returns:
-        tsne_results: 2D numpy array of shape (n_samples, 2)
+        tsne_results: numpy array of shape (n_samples, n_components)
     """
+    import csv as _csv
+
     # Convert torch tensor to numpy if needed
     if isinstance(embeddings, torch.Tensor):
         embeddings = embeddings.detach().cpu().numpy()
@@ -69,9 +100,11 @@ def plot_tsne(
     if embeddings.ndim == 1:
         embeddings = embeddings.reshape(1, -1)
 
+    n_components = max(2, min(3, n_components))
+
     # Run t-SNE
     tsne = TSNE(
-        n_components=2,
+        n_components=n_components,
         perplexity=min(perplexity, len(embeddings) - 1),
         max_iter=n_iter,
         random_state=random_state,
@@ -80,41 +113,108 @@ def plot_tsne(
     )
     tsne_results = tsne.fit_transform(embeddings)
 
-    # Create plot
-    fig, ax = plt.subplots(figsize=figsize)
+    # Save CSV if requested
+    if csv_path is not None:
+        parent = os.path.dirname(csv_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        coord_cols = ["x", "y"] if n_components == 2 else ["x", "y", "z"]
+        with open(csv_path, "w", newline="") as f:
+            writer = _csv.DictWriter(f, fieldnames=coord_cols + ["label", "classname", "dataset"])
+            writer.writeheader()
+            for i, coords in enumerate(tsne_results):
+                label = int(labels[i]) if labels is not None else ""
+                raw_name = class_names[label] if (class_names is not None and labels is not None) else ""
+                raw_name = str(raw_name)
+                if ":" in raw_name:
+                    dataset_col, classname_col = raw_name.split(":", 1)
+                else:
+                    dataset_col, classname_col = "", raw_name
+                row = {"x": coords[0], "y": coords[1], "label": label,
+                       "classname": classname_col, "dataset": dataset_col}
+                if n_components == 3:
+                    row["z"] = coords[2]
+                writer.writerow(row)
+        print(f"t-SNE points saved to {csv_path}")
+
+    # Skip plotting if no image output is needed
+    if save_path is None and csv_path is not None:
+        return tsne_results
 
     markers = ["o", "^", "s", "D", "P", "X", "*", "v", "<", ">"]
 
-    if labels is not None:
-        unique_labels = np.unique(labels)
-        colors = plt.cm.get_cmap(cmap, len(unique_labels))
+    if n_components == 3:
+        from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot(111, projection='3d')
 
-        for i, label in enumerate(unique_labels):
-            mask = labels == label
-            label_name = class_names[label] if class_names is not None else f"Class {label}"
+        if labels is not None:
+            unique_labels = np.unique(labels)
+            colors = plt.cm.get_cmap(cmap, len(unique_labels))
+            for i, label in enumerate(unique_labels):
+                mask = labels == label
+                label_name = class_names[label] if class_names is not None else f"Class {label}"
+                ax.scatter(
+                    tsne_results[mask, 0], tsne_results[mask, 1], tsne_results[mask, 2],
+                    c=[colors(i)], marker=markers[i % len(markers)],
+                    label=label_name, alpha=alpha, s=50,
+                )
+            if show_legend and not clean:
+                ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
+        else:
+            ax.scatter(tsne_results[:, 0], tsne_results[:, 1], tsne_results[:, 2], alpha=alpha, s=50)
+
+        if clean:
+            ax.set_title("")
+            ax.set_xlabel("")
+            ax.set_ylabel("")
+            ax.set_zlabel("")
+        else:
+            ax.set_title(title, fontsize=14)
+            ax.set_xlabel("t-SNE 1")
+            ax.set_ylabel("t-SNE 2")
+            ax.set_zlabel("t-SNE 3")
+
+    else:
+        fig, ax = plt.subplots(figsize=figsize)
+
+        if labels is not None:
+            unique_labels = np.unique(labels)
+            colors = plt.cm.get_cmap(cmap, len(unique_labels))
+
+            for i, label in enumerate(unique_labels):
+                mask = labels == label
+                label_name = class_names[label] if class_names is not None else f"Class {label}"
+                ax.scatter(
+                    tsne_results[mask, 0],
+                    tsne_results[mask, 1],
+                    c=[colors(i)],
+                    marker=markers[i % len(markers)],
+                    label=label_name,
+                    alpha=alpha,
+                    s=50,
+                )
+
+            if show_legend and not clean:
+                ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
+        else:
             ax.scatter(
-                tsne_results[mask, 0],
-                tsne_results[mask, 1],
-                c=[colors(i)],
-                marker=markers[i % len(markers)],
-                label=label_name,
+                tsne_results[:, 0],
+                tsne_results[:, 1],
                 alpha=alpha,
                 s=50,
             )
 
-        if show_legend:
-            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
-    else:
-        ax.scatter(
-            tsne_results[:, 0],
-            tsne_results[:, 1],
-            alpha=alpha,
-            s=50,
-        )
-
-    ax.set_title(title, fontsize=14)
-    ax.set_xlabel("t-SNE 1")
-    ax.set_ylabel("t-SNE 2")
+        if clean:
+            ax.set_title("")
+            ax.set_xlabel("")
+            ax.set_ylabel("")
+            ax.set_xticks([])
+            ax.set_yticks([])
+        else:
+            ax.set_title(title, fontsize=14)
+            ax.set_xlabel("t-SNE 1")
+            ax.set_ylabel("t-SNE 2")
 
     plt.tight_layout()
 
@@ -456,10 +556,13 @@ def plot_tsne_from_datasets(
     max_classes=None,
     include_text=False,
     save_path=None,
+    csv_path=None,
+    n_components=2,
     title=None,
     perplexity=30,
     n_iter=1000,
     batch_size=32,
+    balance_classes=False,
     **tsne_kwargs
 ):
     """
@@ -493,14 +596,9 @@ def plot_tsne_from_datasets(
         checkpoint = torch.load(model_path, map_location=device)
         model.load_state_dict(checkpoint["state_dict"], strict=False)
 
-    # Calculate classes per dataset
     num_datasets = len(dataset_names)
-    if max_classes is not None:
-        classes_per_dataset = max_classes // num_datasets
-        remainder = max_classes % num_datasets
-    else:
-        classes_per_dataset = None
-        remainder = 0
+    remaining_budget = max_classes  # None means unlimited
+    remaining_count = num_datasets
 
     all_embeddings = []
     all_labels = []
@@ -508,24 +606,37 @@ def plot_tsne_from_datasets(
     label_offset = 0
 
     for i, dataset_name in enumerate(dataset_names):
-        # Distribute remainder classes to first datasets
-        dataset_max_classes = classes_per_dataset
-        if dataset_max_classes is not None and i < remainder:
-            dataset_max_classes += 1
+        if remaining_budget is not None:
+            if balance_classes:
+                dataset_max_classes = math.ceil(remaining_budget / remaining_count)
+            else:
+                base = remaining_budget // remaining_count
+                dataset_max_classes = base + (1 if i < remaining_budget % num_datasets else 0)
+        else:
+            dataset_max_classes = None
 
         print(f"\nProcessing {dataset_name}" + (f" (max {dataset_max_classes} classes)" if dataset_max_classes else ""))
 
-        embeddings, labels, class_names = extract_embeddings_from_dataset(
-            model=model,
-            dataset_name=dataset_name,
-            data_location=data_location,
-            device=device,
-            split=split,
-            max_samples=max_samples,
-            max_classes=dataset_max_classes,
-            include_text=include_text,
-            batch_size=batch_size,
-        )
+        try:
+            embeddings, labels, class_names = extract_embeddings_from_dataset(
+                model=model,
+                dataset_name=dataset_name,
+                data_location=data_location,
+                device=device,
+                split=split,
+                max_samples=max_samples,
+                max_classes=dataset_max_classes,
+                include_text=include_text,
+                batch_size=batch_size,
+            )
+        except Exception as e:
+            print(f"  Skipping {dataset_name}: {e}")
+            remaining_count -= 1
+            continue
+
+        if remaining_budget is not None:
+            remaining_budget -= len(class_names)
+        remaining_count -= 1
 
         # Offset labels to make them unique across datasets
         labels = labels + label_offset
@@ -552,6 +663,8 @@ def plot_tsne_from_datasets(
         class_names=all_class_names,
         title=plot_title,
         save_path=save_path,
+        csv_path=csv_path,
+        n_components=n_components,
         perplexity=perplexity,
         n_iter=n_iter,
         **tsne_kwargs
@@ -571,6 +684,8 @@ def plot_tsne_from_dataset(
     max_classes=None,
     include_text=False,
     save_path=None,
+    csv_path=None,
+    n_components=2,
     title=None,
     perplexity=30,
     n_iter=1000,
@@ -628,6 +743,8 @@ def plot_tsne_from_dataset(
         class_names=class_names,
         title=plot_title,
         save_path=save_path,
+        csv_path=csv_path,
+        n_components=n_components,
         perplexity=perplexity,
         n_iter=n_iter,
         **tsne_kwargs
@@ -645,6 +762,8 @@ def plot_tsne_from_model(
     text_file=None,
     device="cuda",
     save_path=None,
+    csv_path=None,
+    n_components=2,
     title="t-SNE Visualization",
     perplexity=30,
     n_iter=1000,
@@ -700,6 +819,8 @@ def plot_tsne_from_model(
         class_names=class_names,
         title=title,
         save_path=save_path,
+        csv_path=csv_path,
+        n_components=n_components,
         perplexity=min(perplexity, len(embeddings) - 1),
         n_iter=n_iter,
         **tsne_kwargs
@@ -919,6 +1040,114 @@ def compare_models(result_paths, save_path, baseline_path=None, top5=False, titl
 
 
 # =============================================================================
+# Multi-model Batch t-SNE
+# =============================================================================
+
+def plot_tsne_for_model_dir(
+    model_dir,
+    save_dir,
+    csv_dir=None,
+    n_components=2,
+    dataset_names=None,
+    dataset_name=None,
+    model_name="ViT-B/16",
+    data_location="./data",
+    device="cuda",
+    split="test",
+    max_samples=None,
+    max_classes=None,
+    include_text=False,
+    balance_classes=False,
+    perplexity=30,
+    n_iter=1000,
+    batch_size=32,
+    **tsne_kwargs,
+):
+    """Generate a t-SNE plot for every .pth checkpoint found in model_dir.
+
+    Args:
+        model_dir: Directory to scan for *.pth checkpoint files.
+        save_dir: Directory where output PNGs are written (created if needed).
+        dataset_names: List of dataset names (multi-dataset mode).
+        dataset_name: Single dataset name (single-dataset mode).
+        All remaining args are forwarded to plot_tsne_from_dataset /
+        plot_tsne_from_datasets unchanged.
+    """
+    checkpoints = sorted(
+        glob(os.path.join(model_dir, "*.pth")) +
+        glob(os.path.join(model_dir, "*", "*.pth"))
+    )
+    if not checkpoints:
+        print(f"No .pth files found in {model_dir} or its subdirectories")
+        return
+
+    os.makedirs(save_dir, exist_ok=True)
+    print(f"Found {len(checkpoints)} checkpoint(s) in {model_dir}")
+
+    for ckpt_path in checkpoints:
+        rel = os.path.relpath(ckpt_path, model_dir)
+        subdir = os.path.dirname(rel)
+        stem = os.path.splitext(os.path.basename(ckpt_path))[0]
+        out_dir = os.path.join(save_dir, subdir)
+        os.makedirs(out_dir, exist_ok=True)
+        out_path = os.path.join(out_dir, f"{stem}_tsne.png")
+        csv_out_path = None
+        if csv_dir is not None:
+            csv_out_dir = os.path.join(csv_dir, subdir)
+            os.makedirs(csv_out_dir, exist_ok=True)
+            csv_out_path = os.path.join(csv_out_dir, f"{stem}_tsne.csv")
+        model_stem = os.path.join(subdir, stem) if subdir else stem
+        print(f"\n[{model_stem}] Generating t-SNE → {out_path}")
+
+        try:
+            if dataset_names is not None:
+                plot_tsne_from_datasets(
+                    dataset_names=dataset_names,
+                    model_path=ckpt_path,
+                    model_name=model_name,
+                    data_location=data_location,
+                    device=device,
+                    split=split,
+                    max_samples=max_samples,
+                    max_classes=max_classes,
+                    include_text=include_text,
+                    save_path=out_path,
+                    csv_path=csv_out_path,
+                    n_components=n_components,
+                    title=f"{model_stem} — {', '.join(dataset_names)}",
+                    perplexity=perplexity,
+                    n_iter=n_iter,
+                    batch_size=batch_size,
+                    balance_classes=balance_classes,
+                    **tsne_kwargs,
+                )
+            elif dataset_name is not None:
+                plot_tsne_from_dataset(
+                    dataset_name=dataset_name,
+                    model_path=ckpt_path,
+                    model_name=model_name,
+                    data_location=data_location,
+                    device=device,
+                    split=split,
+                    max_samples=max_samples,
+                    max_classes=max_classes,
+                    include_text=include_text,
+                    save_path=out_path,
+                    csv_path=csv_out_path,
+                    n_components=n_components,
+                    title=f"{model_stem} — {dataset_name}",
+                    perplexity=perplexity,
+                    n_iter=n_iter,
+                    batch_size=batch_size,
+                    **tsne_kwargs,
+                )
+            else:
+                print(f"  Skipping {model_stem}: provide --dataset or --datasets")
+        except Exception as e:
+            print(f"  ERROR processing {model_stem}: {e}")
+
+
+# =============================================================================
 # CLI Entry Point
 # =============================================================================
 
@@ -981,6 +1210,10 @@ Available datasets:
     parser.add_argument("--embeddings", type=str, help="Path to embeddings file (.npy or .pt)")
     parser.add_argument("--labels", type=str, help="Path to labels file (.npy or .pt)")
     parser.add_argument("--perplexity", type=int, default=30, help="t-SNE perplexity (default: 30)")
+    parser.add_argument("--clean", action="store_true", help="Output clean plot: no title, axis labels, ticks, or legend")
+    parser.add_argument("--3d", action="store_true", dest="use_3d", help="Use 3D t-SNE instead of 2D")
+    parser.add_argument("--csv-path", type=str, help="Save t-SNE coordinates to CSV (x,y[,z],label,classname,dataset); use --save-path for PNG")
+    parser.add_argument("--balance-classes", action="store_true", help="Redistribute unused class quota to remaining datasets so the total stays close to --max-classes")
 
     # t-SNE from model arguments
     parser.add_argument("--model-path", type=str, help="Path to model checkpoint for embedding extraction")
@@ -1002,10 +1235,62 @@ Available datasets:
     parser.add_argument("--max-classes", type=int, default=None, help="Maximum number of classes to include in t-SNE")
     parser.add_argument("--include-text", action="store_true", help="Include text embeddings from class names")
 
+    # t-SNE for all models in a directory
+    parser.add_argument("--model-dir", type=str, help="Directory containing model checkpoints (.pth); generates one t-SNE per model")
+
+    # Dataset presets
+    parser.add_argument(
+        "--all-datasets", action="store_true",
+        help="Use all small auto-download datasets (equivalent to --dataset-preset small)",
+    )
+    parser.add_argument(
+        "--dataset-preset", choices=["small", "imagenet", "all"], default=None,
+        help=(
+            "Predefined dataset group: "
+            "'small' = 12 auto-download datasets, "
+            "'imagenet' = ImageNet variants (require manual download), "
+            "'all' = small + imagenet"
+        ),
+    )
+
     args = parser.parse_args()
 
+    # Resolve dataset presets into args.datasets
+    if args.all_datasets and args.dataset_preset is None:
+        args.dataset_preset = "small"
+    if args.dataset_preset is not None:
+        if args.datasets is not None:
+            parser.error("--datasets and --dataset-preset/--all-datasets are mutually exclusive")
+        args.datasets = DATASET_PRESETS[args.dataset_preset]
+
     if args.tsne:
-        assert args.save_path is not None, "Must provide --save-path for t-SNE"
+        assert args.save_path is not None or args.csv_path is not None, \
+            "Must provide --save-path and/or --csv-path for t-SNE"
+
+        n_components = 3 if args.use_3d else 2
+
+        # Batch mode: one t-SNE per checkpoint in a directory
+        if args.model_dir is not None:
+            plot_tsne_for_model_dir(
+                model_dir=args.model_dir,
+                save_dir=args.save_path or args.csv_path,
+                csv_dir=args.csv_path,
+                n_components=n_components,
+                dataset_names=args.datasets,
+                dataset_name=args.dataset,
+                model_name=args.model_name,
+                data_location=args.data_location,
+                device=args.device,
+                split=args.split,
+                max_samples=args.max_samples,
+                max_classes=args.max_classes,
+                include_text=args.include_text,
+                perplexity=args.perplexity,
+                batch_size=args.batch_size,
+                balance_classes=args.balance_classes,
+                clean=args.clean,
+            )
+            return
 
         # Priority: datasets (multiple) > dataset (single) > image_dir/image_paths/texts > embeddings
         if args.datasets is not None:
@@ -1021,9 +1306,13 @@ Available datasets:
                 max_classes=args.max_classes,
                 include_text=args.include_text,
                 save_path=args.save_path,
+                csv_path=args.csv_path,
+                n_components=n_components,
                 title=args.title,
                 perplexity=args.perplexity,
                 batch_size=args.batch_size,
+                balance_classes=args.balance_classes,
+                clean=args.clean,
             )
         elif args.dataset is not None:
             # Use dataset loader (recommended)
@@ -1038,9 +1327,12 @@ Available datasets:
                 max_classes=args.max_classes,
                 include_text=args.include_text,
                 save_path=args.save_path,
+                csv_path=args.csv_path,
+                n_components=n_components,
                 title=args.title,
                 perplexity=args.perplexity,
                 batch_size=args.batch_size,
+                clean=args.clean,
             )
         elif any([args.image_dir, args.image_paths, args.texts, args.text_file]):
             # Use image directory or paths
@@ -1053,10 +1345,13 @@ Available datasets:
                 text_file=args.text_file,
                 device=args.device,
                 save_path=args.save_path,
+                csv_path=args.csv_path,
+                n_components=n_components,
                 title=args.title or "t-SNE Visualization",
                 perplexity=args.perplexity,
                 batch_size=args.batch_size,
                 max_images=args.max_images,
+                clean=args.clean,
             )
         elif args.embeddings is not None:
             # Use pre-computed embeddings
@@ -1079,7 +1374,10 @@ Available datasets:
                 labels=labels,
                 title=args.title or "t-SNE Visualization",
                 save_path=args.save_path,
+                csv_path=args.csv_path,
+                n_components=n_components,
                 perplexity=args.perplexity,
+                clean=args.clean,
             )
         else:
             raise ValueError(
