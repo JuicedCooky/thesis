@@ -16,8 +16,10 @@ This document describes the plotting utilities available in `src/plot.py` for vi
 | t-SNE from embeddings | `--tsne --embeddings file.npy --save-path tsne.png` |
 | t-SNE from image directory | `--tsne --image-dir ./images --save-path tsne.png` |
 | t-SNE all models in directory | `--tsne --model-dir ckpt/models/ --dataset DTD --save-path out/` |
-| Training metrics | `--single --path ./ckpt/exp` |
-| Sequential results | `--all --path ./ckpt/exp` |
+| Training metrics (PNG) | `--single --path ./ckpt/exp --save-path metrics.png` |
+| Training metrics (CSV) | `--single --path ./ckpt/exp --csv-path metrics.csv` |
+| Sequential results (PNG) | `--all --path ./ckpt/exp --save-path stages.png` |
+| Sequential results (CSV) | `--all --path ./ckpt/exp --csv-path stages.csv` |
 | Model comparison | `--result-paths model1/results.csv model2/results.csv --save-path compare.png` |
 
 ---
@@ -223,11 +225,14 @@ python -m src.plot --tsne --image-dir ./data/images --texts "cat" "dog" "bird" -
 | `--perplexity` | 30 | t-SNE perplexity (typically 5-50) |
 | `--batch-size` | 32 | Batch size for embedding extraction |
 | `--max-samples` | None | Maximum samples from dataset |
+| `--max-classes` | None | Maximum total classes across all datasets |
+| `--classes-per-dataset` | None | Target N classes per dataset; surplus fills later datasets up to `--max-classes` |
 | `--max-images` | None | Maximum images from directory |
 | `--device` | cuda | Device for model inference |
 | `--model-name` | ViT-B/16 | CLIP architecture |
 | `--split` | test | Dataset split (train/test) |
 | `--include-text` | False | Include text embeddings from class names |
+| `--balance-classes` | False | Redistribute unused class quota evenly across datasets |
 | `--clean` | False | Strip title, axis labels, ticks, and legend from PNG |
 
 ### CSV Output Format
@@ -264,15 +269,30 @@ python -m src.plot --single --path ./ckpt/experiment/
 # Custom save path and title
 python -m src.plot --single --path ./ckpt/experiment/ \
     --save-path metrics.png --title "Training Progress"
+
+# Save combined CSV instead of (or alongside) PNG
+python -m src.plot --single --path ./ckpt/experiment/ --csv-path metrics.csv
+python -m src.plot --single --path ./ckpt/experiment/ \
+    --save-path metrics.png --csv-path metrics.csv
 ```
 
-**Expected CSV format** (`*metrics*.csv` files in the directory):
+**Input CSV format** (`*metrics*.csv` files in the directory):
 
 ```csv
 iteration,top1,top5
 100,45.2,72.1
 200,52.3,78.4
 300,58.1,82.3
+```
+
+**Output CSV format** (when `--csv-path` is used): long format across all datasets:
+
+```csv
+dataset,iteration,top1,top5
+DTD,100,45.2,72.1
+DTD,200,52.3,78.4
+CIFAR100,100,61.0,85.2
+...
 ```
 
 ### Sequential Training Results
@@ -284,6 +304,11 @@ python -m src.plot --all --path ./ckpt/experiment/
 
 # Show accuracy values as text labels
 python -m src.plot --all --path ./ckpt/experiment/ --text
+
+# Save combined CSV instead of (or alongside) PNG
+python -m src.plot --all --path ./ckpt/experiment/ --csv-path stages.csv
+python -m src.plot --all --path ./ckpt/experiment/ \
+    --save-path stages.png --csv-path stages.csv
 ```
 
 **Expected directory structure**:
@@ -297,13 +322,23 @@ experiment/
         └── results.csv
 ```
 
-**Expected CSV format** (`*results*.csv`):
+**Input CSV format** (`*results*.csv`):
 
 ```csv
 dataset,top1,top5
 CIFAR10,85.2,97.1
 CIFAR100,62.3,85.4
 ImageNet,58.1,82.0
+```
+
+**Output CSV format** (when `--csv-path` is used):
+
+```csv
+stage,dataset,top1,top5
+experiment,CIFAR10,85.2,97.1
+stage1,CIFAR10,83.1,96.5
+stage1/stage2,CIFAR10,80.4,95.1
+...
 ```
 
 ---
@@ -360,7 +395,7 @@ Use the plotting functions directly in Python:
 ### t-SNE from Dataset
 
 ```python
-from src.plot import plot_tsne_from_dataset, extract_embeddings_from_dataset, load_clip_model
+from src.plot import plot_tsne_from_dataset, plot_tsne_from_datasets, extract_embeddings_from_dataset, load_clip_model
 
 # All-in-one: load dataset, extract embeddings, and plot
 embeddings, tsne_coords = plot_tsne_from_dataset(
@@ -374,6 +409,24 @@ embeddings, tsne_coords = plot_tsne_from_dataset(
     csv_path="tsne.csv",          # optional: also save coordinates
     n_components=2,               # 2 or 3
     title="CIFAR-100 Embeddings",
+    perplexity=30,
+)
+
+# Multiple datasets combined
+embeddings, tsne_coords = plot_tsne_from_datasets(
+    dataset_names=["DTD", "CIFAR100", "EuroSAT"],
+    model_path="ckpt/model.pth",  # or None for pretrained CLIP
+    data_location="./data",
+    split="test",
+    max_samples=2000,
+    max_classes=30,               # distributed across datasets
+    classes_per_dataset=10,       # target per dataset (surplus fills later ones)
+    balance_classes=True,         # redistribute unused quota evenly
+    include_text=False,
+    save_path="tsne_multi.png",
+    csv_path="tsne_multi.csv",
+    n_components=2,
+    title="Multi-Dataset t-SNE",
     perplexity=30,
 )
 
@@ -457,11 +510,20 @@ embeddings, labels, class_names = extract_embeddings_from_model(
 ```python
 from src.plot import plot_metrics, plot_sequential_results, compare_models
 
-# Single experiment
+# Single experiment — PNG only
 plot_metrics("./ckpt/experiment/", save_path="metrics.png", title="Training Progress")
 
-# Sequential results
+# Single experiment — CSV only
+plot_metrics("./ckpt/experiment/", csv_path="metrics.csv")
+
+# Single experiment — both
+plot_metrics("./ckpt/experiment/", save_path="metrics.png", csv_path="metrics.csv")
+
+# Sequential results — PNG only
 plot_sequential_results("./ckpt/experiment/", save_path="stages.png", show_text=True)
+
+# Sequential results — CSV only
+plot_sequential_results("./ckpt/experiment/", csv_path="stages.csv")
 
 # Model comparison
 compare_models(
@@ -500,14 +562,17 @@ Model comparison:
   --top5                Use top-5 accuracy instead of top-1
 
 t-SNE arguments:
+  --csv-path PATH       Save output as CSV instead of (or alongside) PNG.
+                        t-SNE: x, y[, z], label, classname, dataset
+                        --single: dataset, iteration, top1, top5
+                        --all: stage, dataset, top1, top5
+
   --tsne                Generate t-SNE (requires --save-path and/or --csv-path)
   --embeddings PATH     Path to embeddings file (.npy or .pt)
   --labels PATH         Path to labels file (.npy or .pt)
   --perplexity N        t-SNE perplexity (default: 30)
   --clean               Strip title, axis labels, ticks, and legend from PNG
   --3d                  Use 3D t-SNE instead of 2D
-  --csv-path PATH       Save t-SNE coordinates as CSV instead of (or alongside) PNG
-                        Columns: x, y[, z], label, classname, dataset
 
 t-SNE from model:
   --model-path PATH     Path to model checkpoint for embedding extraction

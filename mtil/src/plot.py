@@ -506,12 +506,14 @@ def extract_embeddings_from_dataset(
 
     # Filter to max_classes if specified
     if max_classes is not None and max_classes < len(class_names):
-        print(f"Filtering to first {max_classes} classes (out of {len(class_names)})")
-        # Keep only samples belonging to the first max_classes classes
-        mask = labels < max_classes
+        unique_labels = np.unique(labels)
+        selected = unique_labels[:max_classes]
+        print(f"Filtering to first {len(selected)} classes (out of {len(class_names)})")
+        mask = np.isin(labels, selected)
+        label_map = {int(old): new for new, old in enumerate(selected)}
         embeddings = embeddings[mask]
-        labels = labels[mask]
-        class_names = class_names[:max_classes]
+        labels = np.array([label_map[int(l)] for l in labels[mask]])
+        class_names = [class_names[int(l)] for l in selected]
 
     print(f"Extracted {len(embeddings)} image embeddings")
 
@@ -554,6 +556,7 @@ def plot_tsne_from_datasets(
     split="test",
     max_samples=None,
     max_classes=None,
+    classes_per_dataset=None,
     include_text=False,
     save_path=None,
     csv_path=None,
@@ -562,7 +565,7 @@ def plot_tsne_from_datasets(
     perplexity=30,
     n_iter=1000,
     batch_size=32,
-    balance_classes=False,
+    balance_classes=True,
     **tsne_kwargs
 ):
     """
@@ -606,7 +609,14 @@ def plot_tsne_from_datasets(
     label_offset = 0
 
     for i, dataset_name in enumerate(dataset_names):
-        if remaining_budget is not None:
+        if classes_per_dataset is not None:
+            # Target N classes per dataset; remaining_budget acts as a hard overall cap.
+            # Surplus from small datasets flows to later ones because remaining_budget
+            # is decremented by actual classes used, not the target.
+            dataset_max_classes = classes_per_dataset
+            if remaining_budget is not None:
+                dataset_max_classes = min(dataset_max_classes, remaining_budget)
+        elif remaining_budget is not None:
             if balance_classes:
                 dataset_max_classes = math.ceil(remaining_budget / remaining_count)
             else:
@@ -614,6 +624,11 @@ def plot_tsne_from_datasets(
                 dataset_max_classes = base + (1 if i < remaining_budget % num_datasets else 0)
         else:
             dataset_max_classes = None
+
+        if dataset_max_classes is not None and dataset_max_classes == 0:
+            print(f"  Skipping {dataset_name}: class budget exhausted")
+            remaining_count -= 1
+            continue
 
         print(f"\nProcessing {dataset_name}" + (f" (max {dataset_max_classes} classes)" if dataset_max_classes else ""))
 
@@ -716,12 +731,12 @@ def plot_tsne_from_dataset(
         embeddings: The extracted embeddings
         tsne_results: The 2D t-SNE coordinates
     """
-    # model, _ = load_clip_model(model_path, model_name, device)
     print("model name:", model_name)
     model, _, preprocess = clip.load(model_name, device=device, jit=False)
-    checkpoint = torch.load(model_path, map_location=device)
 
-    model.load_state_dict(checkpoint["state_dict"], strict=False)
+    if model_path is not None:
+        checkpoint = torch.load(model_path, map_location=device)
+        model.load_state_dict(checkpoint["state_dict"], strict=False)
 
     embeddings, labels, class_names = extract_embeddings_from_dataset(
         model=model,
@@ -833,7 +848,7 @@ def plot_tsne_from_model(
 # Training Metrics Plotting Functions
 # =============================================================================
 
-def plot_metrics(path, save_path=None, title=None):
+def plot_metrics(path, save_path=None, csv_path=None, title=None):
     """
     Plot accuracy metrics over training iterations from CSV files.
 
@@ -842,7 +857,8 @@ def plot_metrics(path, save_path=None, title=None):
 
     Args:
         path: Directory containing metrics CSV files
-        save_path: Path to save the plot (default: path/output.png)
+        save_path: Path to save the PNG plot (default: path/output.png if csv_path not given)
+        csv_path: Path to save combined metrics as CSV (dataset, iteration, top1, top5)
         title: Plot title (default: "Accuracy over iterations")
 
     Expected CSV format:
@@ -854,6 +870,7 @@ def plot_metrics(path, save_path=None, title=None):
     dataset_names = []
     iterations = []
     accuracies_top1 = []
+    accuracies_top5 = []
 
     for csv_file in os.listdir(path):
         if csv_file.endswith(".csv") and "metrics" in csv_file:
@@ -864,9 +881,30 @@ def plot_metrics(path, save_path=None, title=None):
                 reader = list(csv.DictReader(f))
                 iterations.append([int(row["iteration"]) for row in reader])
                 accuracies_top1.append([float(row["top1"]) for row in reader])
+                accuracies_top5.append([float(row["top5"]) for row in reader])
 
     if not dataset_names:
         print(f"No metrics CSV files found in {path}")
+        return
+
+    if csv_path is not None:
+        parent = os.path.dirname(csv_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["dataset", "iteration", "top1", "top5"])
+            writer.writeheader()
+            for i, dataset in enumerate(dataset_names):
+                for j, iteration in enumerate(iterations[i]):
+                    writer.writerow({
+                        "dataset": dataset,
+                        "iteration": iteration,
+                        "top1": accuracies_top1[i][j],
+                        "top5": accuracies_top5[i][j],
+                    })
+        print(f"Metrics saved to {csv_path}")
+
+    if save_path is None and csv_path is not None:
         return
 
     plt.figure(figsize=(10, 6))
@@ -886,7 +924,7 @@ def plot_metrics(path, save_path=None, title=None):
     print(f"Plot saved to {output_path}")
 
 
-def plot_sequential_results(path, save_path=None, title=None, show_text=False):
+def plot_sequential_results(path, save_path=None, csv_path=None, title=None, show_text=False):
     """
     Plot accuracy across sequential training stages.
 
@@ -895,7 +933,8 @@ def plot_sequential_results(path, save_path=None, title=None, show_text=False):
 
     Args:
         path: Root directory containing nested result folders
-        save_path: Path to save the plot
+        save_path: Path to save the PNG plot (default: path/output_all.png if csv_path not given)
+        csv_path: Path to save combined results as CSV (stage, dataset, top1, top5)
         title: Plot title
         show_text: Whether to show accuracy values as text labels
 
@@ -910,6 +949,7 @@ def plot_sequential_results(path, save_path=None, title=None, show_text=False):
     stages = []
     datasets = []
     accuracies_top1 = []
+    accuracies_top5 = []
 
     current_path = path
     while True:
@@ -925,6 +965,7 @@ def plot_sequential_results(path, save_path=None, title=None, show_text=False):
                     if not datasets:
                         datasets = [row["dataset"] for row in reader]
                     accuracies_top1.append([float(row["top1"]) for row in reader])
+                    accuracies_top5.append([float(row["top5"]) for row in reader])
 
         if not subdirs:
             break
@@ -932,6 +973,26 @@ def plot_sequential_results(path, save_path=None, title=None, show_text=False):
 
     if not stages:
         print(f"No results CSV files found in {path}")
+        return
+
+    if csv_path is not None:
+        parent = os.path.dirname(csv_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["stage", "dataset", "top1", "top5"])
+            writer.writeheader()
+            for j, stage in enumerate(stages):
+                for i, dataset in enumerate(datasets):
+                    writer.writerow({
+                        "stage": stage,
+                        "dataset": dataset,
+                        "top1": accuracies_top1[j][i],
+                        "top5": accuracies_top5[j][i],
+                    })
+        print(f"Results saved to {csv_path}")
+
+    if save_path is None and csv_path is not None:
         return
 
     plt.figure(figsize=(12, 6))
@@ -1056,8 +1117,9 @@ def plot_tsne_for_model_dir(
     split="test",
     max_samples=None,
     max_classes=None,
+    classes_per_dataset=None,
     include_text=False,
-    balance_classes=False,
+    balance_classes=True,
     perplexity=30,
     n_iter=1000,
     batch_size=32,
@@ -1081,16 +1143,19 @@ def plot_tsne_for_model_dir(
         print(f"No .pth files found in {model_dir} or its subdirectories")
         return
 
-    os.makedirs(save_dir, exist_ok=True)
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
     print(f"Found {len(checkpoints)} checkpoint(s) in {model_dir}")
 
     for ckpt_path in checkpoints:
         rel = os.path.relpath(ckpt_path, model_dir)
         subdir = os.path.dirname(rel)
         stem = os.path.splitext(os.path.basename(ckpt_path))[0]
-        out_dir = os.path.join(save_dir, subdir)
-        os.makedirs(out_dir, exist_ok=True)
-        out_path = os.path.join(out_dir, f"{stem}_tsne.png")
+        out_path = None
+        if save_dir is not None:
+            out_dir = os.path.join(save_dir, subdir)
+            os.makedirs(out_dir, exist_ok=True)
+            out_path = os.path.join(out_dir, f"{stem}_tsne.png")
         csv_out_path = None
         if csv_dir is not None:
             csv_out_dir = os.path.join(csv_dir, subdir)
@@ -1110,6 +1175,7 @@ def plot_tsne_for_model_dir(
                     split=split,
                     max_samples=max_samples,
                     max_classes=max_classes,
+                    classes_per_dataset=classes_per_dataset,
                     include_text=include_text,
                     save_path=out_path,
                     csv_path=csv_out_path,
@@ -1232,7 +1298,8 @@ Available datasets:
     parser.add_argument("--data-location", type=str, default="./data", help="Root directory for datasets")
     parser.add_argument("--split", type=str, default="test", choices=["train", "test"], help="Dataset split")
     parser.add_argument("--max-samples", type=int, default=None, help="Maximum samples to process from dataset")
-    parser.add_argument("--max-classes", type=int, default=None, help="Maximum number of classes to include in t-SNE")
+    parser.add_argument("--max-classes", type=int, default=None, help="Maximum total classes across all datasets")
+    parser.add_argument("--classes-per-dataset", type=int, default=None, help="Target N classes per dataset; surplus from small datasets fills later ones up to --max-classes")
     parser.add_argument("--include-text", action="store_true", help="Include text embeddings from class names")
 
     # t-SNE for all models in a directory
@@ -1273,7 +1340,7 @@ Available datasets:
         if args.model_dir is not None:
             plot_tsne_for_model_dir(
                 model_dir=args.model_dir,
-                save_dir=args.save_path or args.csv_path,
+                save_dir=args.save_path,
                 csv_dir=args.csv_path,
                 n_components=n_components,
                 dataset_names=args.datasets,
@@ -1284,6 +1351,7 @@ Available datasets:
                 split=args.split,
                 max_samples=args.max_samples,
                 max_classes=args.max_classes,
+                classes_per_dataset=args.classes_per_dataset,
                 include_text=args.include_text,
                 perplexity=args.perplexity,
                 batch_size=args.batch_size,
@@ -1304,6 +1372,7 @@ Available datasets:
                 split=args.split,
                 max_samples=args.max_samples,
                 max_classes=args.max_classes,
+                classes_per_dataset=args.classes_per_dataset,
                 include_text=args.include_text,
                 save_path=args.save_path,
                 csv_path=args.csv_path,
@@ -1386,11 +1455,11 @@ Available datasets:
 
     elif args.single:
         assert args.path is not None, "Must provide --path for single mode"
-        plot_metrics(args.path, save_path=args.save_path, title=args.title)
+        plot_metrics(args.path, save_path=args.save_path, csv_path=args.csv_path, title=args.title)
 
     elif args.all:
         assert args.path is not None, "Must provide --path for all mode"
-        plot_sequential_results(args.path, save_path=args.save_path, title=args.title, show_text=args.text)
+        plot_sequential_results(args.path, save_path=args.save_path, csv_path=args.csv_path, title=args.title, show_text=args.text)
 
     elif args.result_paths is not None:
         assert args.save_path is not None, "Must provide --save-path for model comparison"
