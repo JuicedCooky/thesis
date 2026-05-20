@@ -1,3 +1,5 @@
+Website demonstration of models: http://continual-learning-bucket.s3-website.us-east-2.amazonaws.com/
+
 Repository of Frontend Demo: https://github.com/JuicedCooky/zscl_ui
 
 # MTIL — Multi-Task Incremental Learning with CLIP
