@@ -1,4 +1,4 @@
-Website demonstration of models: http://continual-learning-bucket.s3-website.us-east-2.amazonaws.com/
+Website demonstration of models: https://d3fb1aoel68owy.cloudfront.net
 
 Repository of Frontend Demo: https://github.com/JuicedCooky/zscl_ui
 
